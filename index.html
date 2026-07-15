@@ -217,6 +217,31 @@
               <h3 class="test-card-title">Preguntas Falladas</h3>
               <p class="test-card-desc" id="lbl-fallidas-count">Practica exclusivamente tus 0 preguntas falladas en tests previos.</p>
             </div>
+
+            <div class="test-selection-card" id="card-test-generadas" onclick="app.iniciarTestGeneradas()">
+              <div class="test-card-icon" style="background: rgba(15, 76, 129, 0.15); color: var(--color-primary-light);">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+              </div>
+              <h3 class="test-card-title">Preguntas de IA</h3>
+              <p class="test-card-desc" id="lbl-generadas-count">Practica con tu banco acumulado de 0 preguntas generadas por IA.</p>
+            </div>
+            
+            <div class="test-selection-card" id="card-test-impugnadas" onclick="app.openPreguntasImpugnadasModal()">
+              <div class="test-card-icon" style="background: rgba(239, 68, 68, 0.15); color: var(--color-error);">
+                <svg viewBox="0 0 24 24" width="22" height="22" style="fill: currentColor;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+              </div>
+              <h3 class="test-card-title">Preguntas con Errores</h3>
+              <p class="test-card-desc" id="lbl-impugnadas-count">Revisa y edita las 0 preguntas que has reportado con fallos.</p>
+            </div>
+          </div>
+          
+          <!-- Mis Documentos Guardados para Test -->
+          <h3 style="font-size:16px; color:#fff; font-weight:600; margin-top:35px; margin-bottom:15px; border-bottom:1px solid var(--border-glass); padding-bottom:8px; display:flex; align-items:center; gap:8px;">
+            <svg viewBox="0 0 24 24" width="18" height="18" style="fill: var(--color-accent);"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+            Mis Documentos de Estudio (Tests Guardados)
+          </h3>
+          <div id="test-docs-saved-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 30px;">
+            <!-- Renderizado dinámico de documentos guardados -->
           </div>
         </div>
 
@@ -241,6 +266,13 @@
               
               <div class="options-list" id="q-options-container">
                 <!-- Botones de opciones A, B, C -->
+              </div>
+              
+              <div style="text-align: right; margin-top: 15px;">
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 6px 12px; border-color: var(--color-error); color: var(--color-error); background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; border-radius: 6px;" onclick="app.reportarPreguntaActiva()">
+                  <svg viewBox="0 0 24 24" width="12" height="12" style="fill: currentColor;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                  Reportar Error en Pregunta
+                </button>
               </div>
             </div>
 
@@ -457,6 +489,17 @@
           <p class="form-help">API key gratuita de Google AI Studio para que Gemini pueda leer tus archivos y crear tests.</p>
         </div>
 
+        <h4 style="margin-top:24px; margin-bottom:12px; color:var(--color-accent); font-size:14px; text-transform:uppercase; letter-spacing:0.5px;">Transferencia de Configuración</h4>
+        <div style="background:rgba(255,255,255,0.02); padding:12px; border-radius:6px; border:1px solid var(--border-glass);">
+          <p style="font-size:11px; margin:0 0 10px 0; color:rgba(255,255,255,0.5);">
+            Copia tus credenciales en un código compacto para transferirlo entre tu ordenador y tu iPhone sin tener que escribirlas de nuevo.
+          </p>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" style="flex:1; padding:8px 12px; font-size:12px; cursor:pointer;" onclick="app.exportConfigCode()">Exportar Clave</button>
+            <button class="btn btn-secondary" style="flex:1; padding:8px 12px; font-size:12px; cursor:pointer;" onclick="app.importConfigCode()">Importar Clave</button>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeSettings()">Cancelar</button>
@@ -522,45 +565,67 @@
 
   <!-- 3. MODAL: Detalle de Día de Calendario -->
   <div class="modal-overlay" id="modal-calendario-detail">
-    <div class="modal-container">
+    <div class="modal-container" style="max-width: 95%; width: 1200px; height: 90vh; display: flex; flex-direction: column;">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-calendar-date-title">Día 13 de Julio de 2026</h3>
         <button class="modal-close" onclick="app.closeModal('modal-calendario-detail')">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="day-modal-layout">
-          
+      <div class="modal-body" style="flex-grow: 1; display: flex; flex-direction: row; gap: 24px; padding: 20px 24px; overflow: hidden;">
+        
+        <!-- COLUMNA IZQUIERDA: Checklist de Temas, Notas Generales y Documentos Adjuntos -->
+        <div style="flex: 1; min-width: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding-right: 12px;">
           <!-- checklist de Temas Estudiados este día -->
           <div class="day-modal-themes-selection">
-            <h4 style="font-size:14px; color:#fff; font-weight:600;">Temas Estudiados Hoy</h4>
-            <p style="font-size:11px; color:var(--text-muted); margin-top:2px;">Marca los temas estudiados el día de hoy para actualizar tus vueltas de temario:</p>
+            <h4 style="font-size:14px; color:#fff; font-weight:600; margin:0 0 4px 0;">Temas Estudiados Hoy</h4>
+            <p style="font-size:11px; color:var(--text-muted); margin:0 0 10px 0;">Marca los temas estudiados hoy para actualizar tus estadísticas:</p>
             
-            <div class="day-themes-list" id="day-themes-checkbox-container">
+            <div class="day-themes-list" id="day-themes-checkbox-container" style="max-height: 180px;">
               <!-- Checkboxes renderizados dinámicamente -->
             </div>
           </div>
 
           <!-- Anotaciones/Notas -->
-          <div class="form-group">
-            <label for="calendar-day-notes">Anotaciones y Objetivos</label>
-            <textarea id="calendar-day-notes" class="form-control" rows="3" placeholder="Escribe aquí tus apuntes, horas de estudio, dudas de hoy..."></textarea>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="calendar-day-notes" style="font-size:13px; color:var(--text-muted); font-weight:600;">Anotaciones y Objetivos del Día</label>
+            <textarea id="calendar-day-notes" class="form-control" rows="3" placeholder="Escribe aquí notas rápidas, dudas, horas estudiadas..."></textarea>
           </div>
 
           <!-- Documentos del día -->
-          <h4 style="font-size:14px; border-bottom:1px solid var(--border-glass); padding-bottom:8px;">Documentos adjuntos de hoy</h4>
+          <h4 style="font-size:13px; color:#fff; border-bottom:1px solid var(--border-glass); padding-bottom:8px; margin: 10px 0 0 0; font-weight:600;">Documentos adjuntos de hoy</h4>
           
           <div class="uploaded-docs-list" id="modal-calendar-docs-list">
-            <p style="color:var(--text-muted); font-size:13px; text-align:center; padding:10px;">No hay documentos cargados para hoy.</p>
+            <p style="color:var(--text-muted); font-size:12px; text-align:center; padding:10px;">No hay documentos adjuntos para este día.</p>
           </div>
 
           <!-- Subida de archivo para calendario -->
-          <div class="doc-upload-zone" onclick="document.getElementById('input-calendar-doc-upload').click()">
-            <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-            <p style="font-size:13px; font-weight:500;">Haz clic para subir un archivo a este día</p>
-            <input type="file" id="input-calendar-doc-upload" onchange="app.handleCalendarDocUpload(event)">
+          <div class="doc-upload-zone" onclick="document.getElementById('input-calendar-doc-upload').click()" style="padding:15px; margin-top: 5px;">
+            <svg viewBox="0 0 24 24" style="width:24px; height:24px; margin-bottom:6px;"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            <p style="font-size:12px; font-weight:500;">Haz clic para subir un archivo (PDF/Word/Excel)</p>
+            <input type="file" id="input-calendar-doc-upload" onchange="app.handleCalendarDocUpload(event)" style="display:none;">
+          </div>
+        </div>
+        
+        <!-- COLUMNA DERECHA: APUNTES A MANO Y TRANSCRIPCIONES (ANCHO COMPLETO) -->
+        <div style="flex: 1.8; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; border-left: 1px solid var(--border-glass); padding-left: 24px;">
+          <h4 style="font-size:14px; color:#fff; font-weight:600; display:flex; align-items:center; gap:8px; margin:0;">
+            <svg viewBox="0 0 24 24" width="16" height="16" style="fill: var(--color-accent);"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            Apuntes de Clase a Mano (Transcripción con Gemini)
+          </h4>
+          
+          <!-- Lista de apuntes transcritos en tarjetas divididas de ancho completo -->
+          <div id="modal-calendar-transcriptions-list" style="display:flex; flex-direction:column; gap:16px;">
+            <!-- Se carga dinámicamente desde JS -->
           </div>
 
+          <!-- Zona de subida de fotos de apuntes para transcribir -->
+          <div class="doc-upload-zone" style="border-color: rgba(229, 169, 60, 0.3); background: rgba(229, 169, 60, 0.01); padding: 20px;" onclick="document.getElementById('input-transcribe-upload').click()">
+            <svg viewBox="0 0 24 24" style="fill: var(--color-accent); width:32px; height:32px; margin-bottom:8px;"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+            <p style="font-size:13px; font-weight:500; color:var(--color-accent); margin:0;">Subir foto de apuntes para Transcribir con Gemini</p>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:4px;">Soporta fotos tomadas con móvil (PNG, JPG, JPEG)</p>
+            <input type="file" id="input-transcribe-upload" accept="image/*" onchange="app.handleCalendarNotesTranscription(event)" style="display:none;">
+          </div>
         </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modal-calendario-detail')">Cancelar</button>
@@ -609,7 +674,7 @@
           <div class="doc-upload-zone" id="test-doc-upload-zone" onclick="document.getElementById('input-test-doc-upload').click()">
             <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
             <p style="font-size:13px; font-weight:500;" id="lbl-test-upload-status">Haz clic para subir un documento o imagen</p>
-            <input type="file" id="input-test-doc-upload" onchange="app.handleTestDocSelected(event)" style="display:none;">
+            <input type="file" id="input-test-doc-upload" accept=".pdf,.docx,.txt,.md,.json,.csv,image/*" onchange="app.handleTestDocSelected(event)" style="display:none;">
           </div>
           
           <div id="test-doc-file-info" style="display:none; font-size:12px; background:rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--border-glass); text-align:center;">
@@ -621,6 +686,72 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="app.closeModal('modal-test-upload-doc')">Cancelar</button>
         <button class="btn btn-primary" id="btn-generate-test-doc" onclick="app.iniciarTestDesdeDocumento()" disabled>Generar Test con IA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MODAL: Previsualizador de Documentos (PDFs e Imágenes) -->
+  <div class="modal-overlay" id="modal-document-preview">
+    <div class="modal-container" style="max-width: 900px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="document-preview-title">Previsualizar Documento</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-document-preview')">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 0; overflow: hidden; background: #040811;">
+        <div id="document-preview-content" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+          <!-- Se carga dinámicamente iframe o img -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a id="btn-document-preview-download" href="#" target="_blank" class="btn btn-primary">Abrir en pestaña nueva</a>
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-document-preview')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. MODAL: Previsualización de Transcripción en Pantalla Dividida -->
+  <div class="modal-overlay" id="modal-transcription-split" style="z-index: 250;">
+    <div class="modal-container" style="max-width: 98%; width: 98%; height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="split-preview-title">Visualizador y Editor de Apuntes</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-transcription-split')">&times;</button>
+      </div>
+      <div class="modal-body split-transcription-body" style="padding: 20px; background: #040811;">
+        <!-- Panel izquierdo: Foto de los apuntes -->
+        <div class="split-panel-left">
+          <h4 style="font-size: 13px; color: var(--color-accent); font-weight: 600; margin: 0 0 8px 0;">Foto Original de Apuntes</h4>
+          <div class="split-img-container">
+            <img id="split-photo-img" style="max-width: 100%; max-height: 100%; object-fit: contain;" src="" alt="Foto de apuntes original">
+          </div>
+        </div>
+        <!-- Panel derecho: Transcripción editable -->
+        <div class="split-panel-right">
+          <h4 style="font-size: 13px; color: var(--color-accent); font-weight: 600; margin: 0 0 8px 0;">Texto Transcrito (Editable)</h4>
+          <textarea id="split-text-area" class="form-control" style="flex-grow: 1; font-size: 14px; line-height: 1.6; resize: none; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-glass); border-radius: 8px; padding: 16px; color: #fff; font-family: var(--font-sans);" placeholder="Escribe o edita la transcripción aquí..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-transcription-split')">Cerrar sin guardar</button>
+        <button class="btn btn-primary" onclick="app.saveSplitTranscription()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. MODAL: Gestión de Preguntas Impugnadas/Con Errores -->
+  <div class="modal-overlay" id="modal-preguntas-impugnadas" style="z-index: 240;">
+    <div class="modal-container" style="max-width: 900px; width: 90%; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-header">
+        <h3 class="modal-title">Buzón de Preguntas con Errores</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-preguntas-impugnadas')">&times;</button>
+      </div>
+      <div class="modal-body" style="flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px;">
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0 0 10px 0;">Aquí puedes revisar, corregir y editar las respuestas o explicaciones de las preguntas que has reportado como incorrectas en los tests, o borrarlas por completo.</p>
+        <div id="impugnadas-list-container" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Listado cargado dinámicamente -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-preguntas-impugnadas')">Cerrar</button>
       </div>
     </div>
   </div>
@@ -639,10 +770,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js"></script>
-  <script src="js/githubService.js"></script>
-  <script src="js/geminiService.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/temarioBase.js?v=1.2"></script>
+  <script src="js/githubService.js?v=1.2"></script>
+  <script src="js/geminiService.js?v=1.2"></script>
+  <script src="js/app.js?v=1.2"></script>
 
 </body>
 </html>
