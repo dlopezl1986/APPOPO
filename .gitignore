@@ -1,0 +1,19 @@
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+Thumbs.db
+EHthumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary files
+*.log
+tmp/
+temp/
