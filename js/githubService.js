@@ -2,7 +2,7 @@ const GithubService = {
   // Obtener configuración de localStorage
   getConfig() {
     return {
-      token: localStorage.getItem('appopo_github_token') || atob('Z2hwX2FoTkJqWnB1YVE1cGJHcW9oZjhOUFJ1RWREb21haDBrdFdTQQ=='),
+      token: localStorage.getItem('appopo_github_token') || atob('Z2hwXzEyclFTbXl2M2tpZllza0ltdzdnQTFEVnVkQTVBWDF3aWxQcw=='),
       owner: localStorage.getItem('appopo_github_owner') || 'dlopez1986',
       repo: localStorage.getItem('appopo_github_repo') || 'APPOPO',
       branch: localStorage.getItem('appopo_github_branch') || 'main'
