@@ -1676,6 +1676,20 @@ body {
     gap: 8px;
     align-items: flex-start;
   }
+
+  #btn-settings-mobile {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 8px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    color: var(--text-light);
+    cursor: pointer;
+  }
 }
 
 /* Split Transcription View Modal Styles */
