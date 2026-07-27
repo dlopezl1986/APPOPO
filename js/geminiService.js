@@ -97,6 +97,36 @@ const GeminiService = {
     }
   },
 
+  // Extraer preguntas ya existentes (no generar nuevas) de un examen subido en PDF/Word/imagen
+  async extraerPreguntasDeDocumento(fileDataList = [], extractedTextCombined = null) {
+    let prompt = `Analiza en detalle el/los documento(s) adjuntos, que contienen un examen o listado de preguntas tipo test ya elaborado.
+Extrae TODAS las preguntas de opción múltiple que encuentres, transcribiendo el enunciado y las opciones EXACTAMENTE tal y como aparecen en el documento. No inventes preguntas nuevas ni cambies su redacción.
+Para cada pregunta:
+- Si el documento incluye una plantilla o clave de respuestas correctas, úsala para marcar con total fiabilidad cuál opción es la correcta, y pon "revisar": false.
+- Si el documento NO indica la respuesta correcta, determínala tú mismo aplicando tu propio conocimiento de la materia, y pon "revisar": true para avisar de que conviene revisarla manualmente.
+Incluye siempre una breve explicación de por qué esa opción es la correcta.
+El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
+{
+  "preguntas": [
+    {
+      "pregunta": "Enunciado exacto de la pregunta...",
+      "opciones": ["Opción 1...", "Opción 2...", "Opción 3..."],
+      "respuestaCorrecta": 0,
+      "explicacion": "...",
+      "revisar": false
+    }
+  ]
+}
+Si el documento no contiene ninguna pregunta de examen reconocible, devuelve "preguntas": [].`;
+
+    if (extractedTextCombined) {
+      prompt += `\n\nContenido adicional en texto (extraído de documentos Word adjuntos):\n${extractedTextCombined}`;
+    }
+
+    // Temperatura baja: aquí queremos fidelidad al documento original, no variedad creativa.
+    return await this._callGemini(prompt, fileDataList, { temperature: 0.2 });
+  },
+
   // Testear si la API key es válida
   async testApiKey() {
     try {

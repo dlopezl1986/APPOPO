@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APPOPO - Tu Oposición Policía Nacional</title>
-  <link rel="stylesheet" href="styles.css?v=2.3">
+  <link rel="stylesheet" href="styles.css?v=2.4">
 
   <!-- SDK de Firebase (sincronización multidispositivo) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
@@ -211,6 +211,14 @@
                 <h3 class="test-card-title">Test por Tema</h3>
                 <p class="test-card-desc">Elige un tema específico del temario oficial y genera un test con IA (Gemini).</p>
               </div>
+            </div>
+
+            <div class="test-selection-card" onclick="app.openSubirPreguntasModal()">
+              <div class="test-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+              </div>
+              <h3 class="test-card-title">Subir Preguntas de un Examen</h3>
+              <p class="test-card-desc">Sube un PDF con un examen ya hecho y añade sus preguntas reales a tu banco.</p>
             </div>
 
             <div class="test-selection-card" id="card-test-fallidas" onclick="app.iniciarTestFallidas()">
@@ -709,6 +717,37 @@
     </div>
   </div>
 
+  <!-- 5b. MODAL: Subir Preguntas desde un Examen ya elaborado -->
+  <div class="modal-overlay" id="modal-subir-preguntas">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title">Añadir Preguntas desde un Examen</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-subir-preguntas')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tema-detail-container">
+          <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
+            Sube uno o varios exámenes en PDF, Word o imagen. Gemini extraerá las preguntas de opción múltiple tal y como aparecen (usando la plantilla de respuestas si la incluyes) y las añadirá a tu banco de preguntas, disponible en "Test Aleatorio" y "Preguntas de IA".
+          </p>
+
+          <div class="doc-upload-zone" onclick="document.getElementById('input-subir-preguntas').click()">
+            <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+            <p style="font-size:13px; font-weight:500;" id="lbl-subir-preguntas-status">Haz clic para subir uno o varios exámenes</p>
+            <input type="file" id="input-subir-preguntas" accept=".pdf,.docx,image/*" multiple onchange="app.handleExamenFilesSelected(event)" style="display:none;">
+          </div>
+
+          <div id="subir-preguntas-file-list" style="display:none; font-size:12px; background:rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--border-glass);">
+            <!-- Lista de archivos seleccionados -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-subir-preguntas')">Cancelar</button>
+        <button class="btn btn-primary" id="btn-extraer-preguntas" onclick="app.extraerPreguntasDelExamen()" disabled>Extraer Preguntas</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 6. MODAL: Previsualizador de Documentos (PDFs e Imágenes) -->
   <div class="modal-overlay" id="modal-document-preview">
     <div class="modal-container" style="max-width: 900px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
@@ -789,10 +828,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js?v=2.3"></script>
-  <script src="js/firebaseService.js?v=2.3"></script>
-  <script src="js/geminiService.js?v=2.3"></script>
-  <script src="js/app.js?v=2.3"></script>
+  <script src="js/temarioBase.js?v=2.4"></script>
+  <script src="js/firebaseService.js?v=2.4"></script>
+  <script src="js/geminiService.js?v=2.4"></script>
+  <script src="js/app.js?v=2.4"></script>
 
 </body>
 </html>

@@ -29,6 +29,9 @@ const app = {
   activeFlashcardIndex: 0,
   flashcardMode: 'normal', // 'normal' o 'dificiles'
 
+  // Archivos de examen seleccionados temporalmente para extraer sus preguntas
+  selectedExamenFiles: [],
+
   // Banco de preguntas de prueba iniciales (por si no tienen conexión a internet/IA)
   mockQuestions: [
     {
@@ -1823,6 +1826,106 @@ const app = {
     return result.value;
   },
 
+  // ================= SUBIR PREGUNTAS DESDE UN EXAMEN =================
+  openSubirPreguntasModal() {
+    if (!GeminiService.hasApiKey()) {
+      alert("Para extraer preguntas con Inteligencia Artificial, debes configurar tu Gemini API Key en ajustes.");
+      this.openSettings();
+      return;
+    }
+
+    this.selectedExamenFiles = [];
+    document.getElementById('lbl-subir-preguntas-status').innerText = 'Haz clic para subir uno o varios exámenes';
+    document.getElementById('subir-preguntas-file-list').style.display = 'none';
+    document.getElementById('subir-preguntas-file-list').innerHTML = '';
+    document.getElementById('btn-extraer-preguntas').disabled = true;
+
+    this.openModal('modal-subir-preguntas');
+  },
+
+  handleExamenFilesSelected(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    this.selectedExamenFiles = files;
+
+    const list = document.getElementById('subir-preguntas-file-list');
+    list.innerHTML = files.map(f => `<div>${f.name}</div>`).join('');
+    list.style.display = 'block';
+
+    document.getElementById('lbl-subir-preguntas-status').innerText = `${files.length} archivo${files.length === 1 ? '' : 's'} seleccionado${files.length === 1 ? '' : 's'}`;
+    document.getElementById('btn-extraer-preguntas').disabled = false;
+  },
+
+  // Extraer (no generar) las preguntas ya existentes en los exámenes subidos y añadirlas al banco general
+  async extraerPreguntasDelExamen() {
+    const files = this.selectedExamenFiles || [];
+    if (files.length === 0) return;
+
+    this.closeModal('modal-subir-preguntas');
+
+    if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
+    let totalExtraidas = 0;
+    let totalNuevas = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      this.showLoading(`Extrayendo preguntas de "${file.name}" (${i + 1}/${files.length})...`);
+
+      try {
+        const fileDataList = [];
+        let extractedText = null;
+
+        if (file.name.toLowerCase().endsWith('.docx')) {
+          const arrayBuffer = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(file);
+          });
+          extractedText = await this.extractTextFromDocx(arrayBuffer);
+        } else {
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1].replace(/\s/g, ''));
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          fileDataList.push({ mimeType: file.type || GeminiService._guessMimeType(file.name), base64 });
+        }
+
+        const response = await GeminiService.extraerPreguntasDeDocumento(fileDataList, extractedText);
+        const preguntas = response.preguntas || [];
+        totalExtraidas += preguntas.length;
+
+        preguntas.forEach(q => {
+          const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
+          if (!exists) {
+            this.db.preguntasGeneradas.push({
+              ...q,
+              id: Date.now() + Math.random(),
+              temaId: null,
+              origen: 'examen_subido'
+            });
+            totalNuevas++;
+          }
+        });
+      } catch (e) {
+        alert(`Error al procesar "${file.name}": ${e.message}`);
+      }
+    }
+
+    await FirebaseService.saveDb(this.db);
+    this.hideLoading();
+    this.selectedExamenFiles = [];
+
+    if (totalExtraidas === 0) {
+      alert("No se ha encontrado ninguna pregunta de examen reconocible en los archivos subidos.");
+    } else {
+      alert(`Se han extraído ${totalExtraidas} preguntas y añadido ${totalNuevas} nuevas a tu banco de preguntas (las que ya tenías no se duplican).`);
+    }
+  },
+
   // Test de preguntas falladas
   iniciarTestFallidas() {
     const falladas = this.db.preguntasFalladas || [];
@@ -1938,16 +2041,15 @@ const app = {
     const optionsContainer = document.getElementById('q-options-container');
     optionsContainer.innerHTML = '';
 
-    const letters = ["A", "B", "C"];
     q.opciones.forEach((opcionText, oIdx) => {
       const btn = document.createElement('button');
-      
+
       const isSelected = this.activeExam.answers[index] === oIdx;
       btn.className = `option-button ${isSelected ? 'selected' : ''}`;
       btn.onclick = () => this.selectOption(oIdx);
 
       btn.innerHTML = `
-        <span class="option-letter">${letters[oIdx]}</span>
+        <span class="option-letter">${String.fromCharCode(65 + oIdx)}</span>
         <span class="option-text">${opcionText}</span>
       `;
       optionsContainer.appendChild(btn);
@@ -2103,8 +2205,8 @@ const app = {
   showResultsReview() {
     const container = document.getElementById('results-review-container');
     container.innerHTML = '';
-    
-    const letters = ["A", "B", "C"];
+
+    const letters = ["A", "B", "C", "D", "E", "F"];
 
     this.currentExamReviewQuestions.forEach((q, idx) => {
       const item = document.createElement('div');
