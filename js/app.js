@@ -498,7 +498,7 @@ const app = {
       card.innerHTML = `
         <div class="tema-header">
           <span class="tema-badge-block">${tema.categoria}</span>
-          <span class="tema-number">${tema.numero ? `Tema ${tema.numero}` : 'Personalizado'}</span>
+          <span class="tema-number">${tema.numero ? `Tema ${tema.numero}` : ''}</span>
         </div>
         <h3 class="tema-title">${tema.titulo}</h3>
         <p class="tema-desc">${tema.descripcion}</p>

@@ -490,6 +490,7 @@ body {
 .filter-btn-group {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .filter-btn {
