@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APPOPO - Tu Oposición Policía Nacional</title>
-  <link rel="stylesheet" href="styles.css?v=2.1">
+  <link rel="stylesheet" href="styles.css?v=2.2">
 
   <!-- SDK de Firebase (sincronización multidispositivo) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
@@ -213,14 +213,6 @@
               </div>
             </div>
 
-            <div class="test-selection-card" onclick="app.openTestPorDocModal()">
-              <div class="test-card-icon">
-                <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-              </div>
-              <h3 class="test-card-title">Test desde Documento</h3>
-              <p class="test-card-desc">Sube cualquier resumen, PDF o imagen y Gemini generará un test personalizado.</p>
-            </div>
-
             <div class="test-selection-card" id="card-test-fallidas" onclick="app.iniciarTestFallidas()">
               <div class="test-card-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--color-error);">
                 <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
@@ -244,15 +236,6 @@
               <h3 class="test-card-title">Preguntas con Errores</h3>
               <p class="test-card-desc" id="lbl-impugnadas-count">Revisa y edita las 0 preguntas que has reportado con fallos.</p>
             </div>
-          </div>
-          
-          <!-- Mis Documentos Guardados para Test -->
-          <h3 style="font-size:16px; color:#fff; font-weight:600; margin-top:35px; margin-bottom:15px; border-bottom:1px solid var(--border-glass); padding-bottom:8px; display:flex; align-items:center; gap:8px;">
-            <svg viewBox="0 0 24 24" width="18" height="18" style="fill: var(--color-accent);"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-            Mis Documentos de Estudio (Tests Guardados)
-          </h3>
-          <div id="test-docs-saved-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; margin-bottom: 30px;">
-            <!-- Renderizado dinámico de documentos guardados -->
           </div>
         </div>
 
@@ -343,9 +326,13 @@
             <h1>Tarjetas de Estudio (Flashcards)</h1>
             <p>Estudia conceptos clave mediante la rueda aleatoria de repaso.</p>
           </div>
-          <div style="display:flex; gap:10px;">
+          <div style="display:flex; gap:10px; flex-wrap: wrap;">
             <button class="btn btn-secondary" id="btn-flashcards-modo-normal" onclick="app.setFlashcardMode('normal')">Baraja Completa</button>
             <button class="btn btn-danger" id="btn-flashcards-modo-dificiles" onclick="app.setFlashcardMode('dificiles')">Mazo Difíciles (<span id="lbl-dificiles-badge">0</span>)</button>
+            <button class="btn btn-primary" onclick="app.openFlashcardsPorTemaModal()">
+              <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor; vertical-align: middle;"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H8v-2h6v2zm3-4H8v-2h9v2zm0-4H8V7h9v2z"/></svg>
+              Flashcards por Tema
+            </button>
           </div>
         </div>
 
@@ -685,11 +672,11 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="test-select-tema-dropdown">Selecciona el Tema oficial:</label>
+          <label for="test-select-tema-dropdown">Selecciona un tema:</label>
           <select id="test-select-tema-dropdown" class="form-control" style="background:#0c152b;">
             <!-- Rellenado dinámicamente -->
           </select>
-          <p class="form-help">Gemini generará automáticamente 15 preguntas con respuesta y explicaciones basadas en este tema oficial.</p>
+          <p class="form-help">Gemini generará 15 preguntas con respuesta y explicaciones. Para un tema oficial usará su temario; para uno personalizado, los documentos que le hayas subido.</p>
         </div>
       </div>
       <div class="modal-footer">
@@ -699,35 +686,25 @@
     </div>
   </div>
 
-  <!-- 5. MODAL: Subir Documento para Generar Test por IA -->
-  <div class="modal-overlay" id="modal-test-upload-doc">
+  <!-- 4b. MODAL: Selector de Tema para Generar Flashcards por IA -->
+  <div class="modal-overlay" id="modal-flashcards-select-tema">
     <div class="modal-container">
       <div class="modal-header">
-        <h3 class="modal-title">Generar Test desde Documento</h3>
-        <button class="modal-close" onclick="app.closeModal('modal-test-upload-doc')">&times;</button>
+        <h3 class="modal-title">Generar Flashcards por Tema (IA)</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-flashcards-select-tema')">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="tema-detail-container">
-          <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
-            Sube un resumen, tema en PDF, leyes consolidadas o una captura de tus apuntes en formato de imagen (PNG/JPG). Gemini leerá el archivo directamente y creará un examen exclusivo de 15 preguntas.
-          </p>
-
-          <!-- Zona de carga de documento temporal -->
-          <div class="doc-upload-zone" id="test-doc-upload-zone" onclick="document.getElementById('input-test-doc-upload').click()">
-            <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-            <p style="font-size:13px; font-weight:500;" id="lbl-test-upload-status">Haz clic para subir un documento o imagen</p>
-            <input type="file" id="input-test-doc-upload" accept=".pdf,.docx,.txt,.md,.json,.csv,image/*" onchange="app.handleTestDocSelected(event)" style="display:none;">
-          </div>
-          
-          <div id="test-doc-file-info" style="display:none; font-size:12px; background:rgba(255,255,255,0.02); padding:10px; border-radius:6px; border:1px solid var(--border-glass); text-align:center;">
-            Archivo seleccionado: <span id="test-doc-filename" style="font-weight:600; color:var(--color-accent);">resumen.pdf</span>
-          </div>
-
+        <div class="form-group">
+          <label for="flashcards-select-tema-dropdown">Selecciona un tema:</label>
+          <select id="flashcards-select-tema-dropdown" class="form-control" style="background:#0c152b;">
+            <!-- Rellenado dinámicamente -->
+          </select>
+          <p class="form-help">Gemini generará entre 12 y 15 flashcards. Para un tema oficial usará su temario; para uno personalizado, los documentos que le hayas subido.</p>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.closeModal('modal-test-upload-doc')">Cancelar</button>
-        <button class="btn btn-primary" id="btn-generate-test-doc" onclick="app.iniciarTestDesdeDocumento()" disabled>Generar Test con IA</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-flashcards-select-tema')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.iniciarFlashcardsPorTema()">Generar con IA</button>
       </div>
     </div>
   </div>
@@ -812,10 +789,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js?v=2.1"></script>
-  <script src="js/firebaseService.js?v=2.1"></script>
-  <script src="js/geminiService.js?v=2.1"></script>
-  <script src="js/app.js?v=2.1"></script>
+  <script src="js/temarioBase.js?v=2.2"></script>
+  <script src="js/firebaseService.js?v=2.2"></script>
+  <script src="js/geminiService.js?v=2.2"></script>
+  <script src="js/app.js?v=2.2"></script>
 
 </body>
 </html>

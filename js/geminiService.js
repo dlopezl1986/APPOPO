@@ -96,37 +96,6 @@ const GeminiService = {
     }
   },
 
-  // Generar test de 15 preguntas a partir de un archivo
-  async generarTestDesdeDocumento(file, base64Content, extractedText = null) {
-    const prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple basadas exclusivamente en el documento o imagen adjunto.
-Cada pregunta debe tener exactamente 3 opciones de respuesta (A, B, C) - que es el formato oficial de la Policía Nacional de España -, donde sólo una opción sea la correcta.
-La dificultad del examen debe ser media-alta, similar a la oposición real.
-El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
-{
-  "preguntas": [
-    {
-      "pregunta": "Enunciado de la pregunta...",
-      "opciones": ["Opción A...", "Opción B...", "Opción C..."],
-      "respuestaCorrecta": 0, // Índice de la respuesta correcta (0 para la primera opción, 1 para la segunda, 2 para la tercera)
-      "explicacion": "Explicación detallada de por qué es la opción correcta citando si es posible la ley o concepto correspondiente."
-    }
-  ]
-}`;
-
-    if (extractedText) {
-      // Si el texto ya fue extraído (ej: de un archivo Word .docx mediante Mammoth.js)
-      const fullPrompt = `${prompt}\n\nAquí tienes el contenido de texto del documento para analizar:\n${extractedText}`;
-      return await this._callGemini(fullPrompt);
-    }
-
-    const fileData = {
-      mimeType: file.type || this._guessMimeType(file.name),
-      base64: base64Content
-    };
-
-    return await this._callGemini(prompt, fileData);
-  },
-
   // Generar test de 15 preguntas a partir de uno o varios documentos de un tema personalizado
   async generarTestDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null) {
     let prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple basadas EXCLUSIVAMENTE en el/los documento(s) adjuntos, que tratan sobre "${nombreTema}".
@@ -193,6 +162,28 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
     };
 
     return await this._callGemini(prompt, fileData);
+  },
+
+  // Generar flashcards a partir de uno o varios documentos de un tema personalizado
+  async generarFlashcardsDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null) {
+    let prompt = `Genera una lista de exactamente 12 a 15 flashcards (tarjetas de memoria de repaso rápido) basadas EXCLUSIVAMENTE en el/los documento(s) adjuntos, que tratan sobre "${nombreTema}".
+Estas tarjetas deben cubrir los términos clave, fechas, plazos, leyes o conceptos más importantes.
+El anverso de la tarjeta debe ser una pregunta directa o concepto corto. El reverso debe ser la respuesta concisa o definición del concepto.
+El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
+{
+  "flashcards": [
+    {
+      "anverso": "Pregunta o concepto corto...",
+      "reverso": "Respuesta concisa..."
+    }
+  ]
+}`;
+
+    if (extractedTextCombined) {
+      prompt += `\n\nContenido adicional en texto (extraído de documentos Word adjuntos):\n${extractedTextCombined}`;
+    }
+
+    return await this._callGemini(prompt, fileDataList);
   },
 
   // Generar flashcards de un tema específico

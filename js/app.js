@@ -28,10 +28,6 @@ const app = {
   activeFlashcardDeck: [],
   activeFlashcardIndex: 0,
   flashcardMode: 'normal', // 'normal' o 'dificiles'
-  
-  // Temporales para carga de archivos
-  selectedTestDocFile: null,
-  selectedTestDocBase64: '',
 
   // Banco de preguntas de prueba iniciales (por si no tienen conexión a internet/IA)
   mockQuestions: [
@@ -1634,8 +1630,6 @@ const app = {
         cardImpugnadas.style.cursor = 'pointer';
       }
     }
-
-    this.renderSavedTestDocs();
   },
 
   // Examen de 15 Preguntas Aleatorias
@@ -1656,15 +1650,9 @@ const app = {
     this.iniciarInterfazExamen();
   },
 
-  // Abrir modal test de tema
-  openTestPorTemaModal() {
-    if (!GeminiService.hasApiKey()) {
-      alert("Para generar tests por tema con Inteligencia Artificial, debes configurar tu Gemini API Key en ajustes.");
-      this.openSettings();
-      return;
-    }
-
-    const select = document.getElementById('test-select-tema-dropdown');
+  // Rellenar un <select> con el temario oficial + temas personalizados agrupados (reutilizado por Test y Flashcards)
+  _populateTemaSelect(selectId) {
+    const select = document.getElementById(selectId);
     select.innerHTML = '';
 
     const groupOficial = document.createElement('optgroup');
@@ -1690,7 +1678,17 @@ const app = {
       });
       select.appendChild(groupPersonal);
     }
+  },
 
+  // Abrir modal test de tema
+  openTestPorTemaModal() {
+    if (!GeminiService.hasApiKey()) {
+      alert("Para generar tests por tema con Inteligencia Artificial, debes configurar tu Gemini API Key en ajustes.");
+      this.openSettings();
+      return;
+    }
+
+    this._populateTemaSelect('test-select-tema-dropdown');
     this.openModal('modal-test-select-tema');
   },
 
@@ -1804,54 +1802,6 @@ const app = {
     }
   },
 
-  // Abrir modal test desde documento
-  openTestPorDocModal() {
-    if (!GeminiService.hasApiKey()) {
-      alert("Para generar tests desde documentos con Inteligencia Artificial, debes configurar tu Gemini API Key en ajustes.");
-      this.openSettings();
-      return;
-    }
-
-    this.selectedTestDocFile = null;
-    this.selectedTestDocBase64 = '';
-    document.getElementById('lbl-test-upload-status').innerText = 'Haz clic para subir un documento o imagen';
-    document.getElementById('test-doc-file-info').style.display = 'none';
-    document.getElementById('btn-generate-test-doc').disabled = true;
-
-    this.openModal('modal-test-upload-doc');
-  },
-
-  // Seleccionar archivo para test
-  handleTestDocSelected(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    // Validar tipo de archivo compatible (PDF, DOCX, Texto e Imágenes)
-    const allowedExtensions = ['pdf', 'txt', 'md', 'json', 'csv', 'png', 'jpg', 'jpeg', 'webp', 'docx'];
-    const fileExt = file.name.split('.').pop().toLowerCase();
-    
-    if (!allowedExtensions.includes(fileExt)) {
-      alert("Formato de archivo no compatible.\n\nFormatos admitidos: PDF (.pdf), Word (.docx), texto plano (.txt, .md) e imágenes (.png, .jpg).");
-      event.target.value = ''; // Limpiar input
-      return;
-    }
-
-    this.selectedTestDocFile = file;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Obtener base64 crudo sin el prefijo data:...;base64,
-      const rawBase64 = reader.result.split(',')[1].replace(/\s/g, '');
-      this.selectedTestDocBase64 = rawBase64;
-
-      document.getElementById('test-doc-filename').innerText = file.name;
-      document.getElementById('test-doc-file-info').style.display = 'block';
-      document.getElementById('lbl-test-upload-status').innerText = 'Archivo cargado con éxito.';
-      document.getElementById('btn-generate-test-doc').disabled = false;
-    };
-    reader.readAsDataURL(file);
-  },
-
   // Cargar Mammoth.js dinámicamente desde CDN si no está cargado
   async loadMammoth() {
     if (window.mammoth) return;
@@ -1869,239 +1819,6 @@ const app = {
     await this.loadMammoth();
     const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
     return result.value;
-  },
-
-  // Iniciar test desde documento cargado con Gemini
-  async iniciarTestDesdeDocumento() {
-    if (!this.selectedTestDocFile || !this.selectedTestDocBase64) return;
-
-    const customName = prompt("Introduce un nombre representativo para este documento (ej. 'Infracciones de Seguridad'):", this.selectedTestDocFile.name.replace(/\.[^/.]+$/, ""));
-    if (customName === null) return; // Si cancela, no procede
-    const finalName = customName.trim() || this.selectedTestDocFile.name.replace(/\.[^/.]+$/, "");
-
-    this.closeModal('modal-test-upload-doc');
-    this.showLoading("Subiendo documento...");
-
-    try {
-      if (!FirebaseService.hasCredentials()) {
-        throw new Error("Debes haber iniciado sesión para poder guardar y realizar tests de documentos.");
-      }
-
-      // 1. Subir documento a Firebase Storage en la carpeta 'test_docs'
-      const uploadedFile = await FirebaseService.uploadDocument('test_docs', 'files', this.selectedTestDocFile);
-      
-      // 2. Guardar en la base de datos de documentos de test
-      const newDoc = {
-        id: Date.now(),
-        nombre: finalName,
-        filename: this.selectedTestDocFile.name,
-        path: uploadedFile.path,
-        url: uploadedFile.url,
-        mimeType: this.selectedTestDocFile.type || 'application/pdf'
-      };
-
-      if (!this.db.documentosTest) this.db.documentosTest = [];
-      this.db.documentosTest.push(newDoc);
-      await FirebaseService.saveDb(this.db);
-
-      // 3. Generar el test con Gemini
-      let extractedText = null;
-      if (this.selectedTestDocFile.name.endsWith('.docx')) {
-        this.showLoading(`Extrayendo texto del archivo Word "${finalName}"...`);
-        const arrayBuffer = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsArrayBuffer(this.selectedTestDocFile);
-        });
-        extractedText = await this.extractTextFromDocx(arrayBuffer);
-      }
-
-      this.showLoading(`Gemini está analizando "${finalName}" y redactando preguntas de examen...`);
-      const response = await GeminiService.generarTestDesdeDocumento(this.selectedTestDocFile, this.selectedTestDocBase64, extractedText);
-      
-      if (!response.preguntas || response.preguntas.length === 0) {
-        throw new Error("No se devolvieron preguntas de test válidas.");
-      }
-
-      // 4. Guardar las preguntas generadas en el banco general permanente para test aleatorio
-      if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
-      response.preguntas.forEach(q => {
-        const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
-        if (!exists) {
-          this.db.preguntasGeneradas.push({
-            ...q,
-            id: Date.now() + Math.random()
-          });
-        }
-      });
-      await FirebaseService.saveDb(this.db);
-
-      this.activeExam.tipoExamen = 'documento';
-      this.activeExam.temaId = null;
-      this.activeExam.questions = response.preguntas.slice(0, 15);
-
-      this.iniciarInterfazExamen();
-    } catch (e) {
-      alert(`Error al procesar el documento: ${e.message}`);
-    } finally {
-      this.hideLoading();
-    }
-  },
-
-  // Generar test desde un documento guardado en la base de datos
-  async iniciarTestDesdeDocumentoGuardado(docId) {
-    const doc = this.db.documentosTest.find(d => d.id === docId);
-    if (!doc) return;
-
-    this.showLoading(`Descargando "${doc.nombre}" y redactando preguntas con Gemini AI...`);
-    try {
-      // 1. Obtener el archivo de Firebase Storage en base64 usando su ruta
-      const fileData = await FirebaseService.fetchFile(doc.path);
-      if (!fileData || !fileData.content) {
-        const details = !fileData ? "Archivo no encontrado en Firebase Storage (404 Not Found)" : `El archivo existe pero el contenido está vacío (longitud: ${fileData.content ? fileData.content.length : 0})`;
-        throw new Error(`No se pudo descargar el documento desde Firebase Storage. Detalles: ${details}. Ruta buscada: "${doc.path}"`);
-      }
-
-      // 2. Generar el test con Gemini
-      const mockFile = {
-        name: doc.filename,
-        type: doc.mimeType
-      };
-
-      let extractedText = null;
-      if (doc.filename.endsWith('.docx')) {
-        this.showLoading(`Descargando "${doc.nombre}" y procesando texto Word con Mammoth...`);
-        const binaryString = atob(fileData.content.replace(/\s/g, ''));
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        extractedText = await this.extractTextFromDocx(bytes.buffer);
-      }
-      
-      const response = await GeminiService.generarTestDesdeDocumento(mockFile, fileData.content, extractedText);
-      
-      if (!response.preguntas || response.preguntas.length === 0) {
-        throw new Error("No se devolvieron preguntas de test válidas.");
-      }
-
-      // 3. Guardar las preguntas generadas en el banco permanente para test aleatorio
-      if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
-      response.preguntas.forEach(q => {
-        const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
-        if (!exists) {
-          this.db.preguntasGeneradas.push({
-            ...q,
-            id: Date.now() + Math.random()
-          });
-        }
-      });
-      await FirebaseService.saveDb(this.db);
-
-      this.activeExam.tipoExamen = 'documento';
-      this.activeExam.temaId = null;
-      this.activeExam.questions = response.preguntas.slice(0, 15);
-
-      this.iniciarInterfazExamen();
-    } catch (e) {
-      alert(`Error al generar test: ${e.message}`);
-    } finally {
-      this.hideLoading();
-    }
-  },
-
-  // Eliminar un documento guardado para test
-  async deleteSavedTestDoc(docId, event) {
-    if (event) event.stopPropagation(); // Evitar iniciar test
-    if (!confirm("¿Seguro que deseas eliminar este documento de tu lista de tests guardados?")) return;
-
-    const docIndex = this.db.documentosTest.findIndex(d => d.id === docId);
-    if (docIndex === -1) return;
-
-    const doc = this.db.documentosTest[docIndex];
-    this.showLoading("Eliminando documento...");
-
-    try {
-      const res = await FirebaseService.fetchFile(doc.path, false);
-      if (res && res.sha) {
-        await FirebaseService.deleteFile(doc.path, res.sha);
-      }
-
-      // 2. Quitar del array
-      this.db.documentosTest.splice(docIndex, 1);
-      await FirebaseService.saveDb(this.db);
-
-      // 3. Re-renderizar lista
-      this.renderSavedTestDocs();
-      alert("Documento eliminado con éxito.");
-    } catch (e) {
-      alert(`Error al eliminar el documento: ${e.message}`);
-    } finally {
-      this.hideLoading();
-    }
-  },
-
-  // Renderizar lista de documentos guardados para test
-  renderSavedTestDocs() {
-    const container = document.getElementById('test-docs-saved-container');
-    if (!container) return;
-
-    const docs = this.db.documentosTest || [];
-    if (docs.length === 0) {
-      container.innerHTML = `
-        <div style="grid-column: 1 / -1; color: var(--text-muted); font-size: 13px; text-align: center; padding: 24px; border: 1px dashed var(--border-glass); border-radius: 12px; background: rgba(255,255,255,0.01); width: 100%;">
-          No tienes documentos guardados aún. Sube un documento usando el botón "Test desde Documento" y asígnale un nombre para guardarlo aquí.
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = '';
-    docs.forEach(doc => {
-      const card = document.createElement('div');
-      card.className = 'test-selection-card';
-      card.style.padding = '18px';
-      card.style.textAlign = 'left';
-      card.style.display = 'flex';
-      card.style.flexDirection = 'column';
-      card.style.justifyContent = 'space-between';
-      card.style.gap = '12px';
-      card.style.minHeight = '140px';
-      card.style.background = 'rgba(255, 255, 255, 0.02)';
-      card.style.border = '1px solid var(--border-glass)';
-      card.style.borderRadius = '12px';
-
-      card.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
-          <div style="display: flex; gap: 12px; align-items: center; min-width: 0;">
-            <div style="width: 36px; height: 36px; background: rgba(229, 169, 60, 0.1); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--color-accent); flex-shrink: 0;">
-              <svg viewBox="0 0 24 24" width="20" height="20" style="fill: currentColor;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-            </div>
-            <div style="min-width: 0;">
-              <h4 style="font-size: 14px; font-weight: 600; color: #fff; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${doc.nombre}</h4>
-              <p style="font-size: 11px; color: var(--text-muted); margin: 2px 0 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${doc.filename}">${doc.filename}</p>
-            </div>
-          </div>
-          <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0;">
-            <button class="btn-icon" style="color: var(--color-accent); padding: 4px; border:none; background:transparent; cursor:pointer;" onclick="app.previewDocument('${doc.url}', '${doc.filename.replace(/'/g, "\\'")}', '${doc.mimeType}', '${doc.path}')" title="Previsualizar documento">
-              <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor;"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-            </button>
-            <button class="btn-icon" style="color: var(--color-error); padding: 4px; border:none; background:transparent; cursor:pointer;" onclick="app.deleteSavedTestDoc(${doc.id}, event)" title="Eliminar documento">
-              <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-            </button>
-          </div>
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: auto;">
-          <button class="btn btn-primary" style="flex-grow: 1; font-size: 12px; padding: 8px; width: 100%; font-weight:600; display:flex; align-items:center; justify-content:center; gap:6px;" onclick="app.iniciarTestDesdeDocumentoGuardado(${doc.id})">
-            <svg viewBox="0 0 24 24" width="14" height="14" style="fill:currentColor;"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-            Hacer Test de 15 Preguntas
-          </button>
-        </div>
-      `;
-      container.appendChild(card);
-    });
   },
 
   // Test de preguntas falladas
@@ -2708,6 +2425,115 @@ const app = {
     this.buildFlashcardDeck();
   },
 
+  // Abrir modal de selección de tema para generar flashcards con IA
+  openFlashcardsPorTemaModal() {
+    if (!GeminiService.hasApiKey()) {
+      alert("Para generar flashcards por tema con Inteligencia Artificial, debes configurar tu Gemini API Key en ajustes.");
+      this.openSettings();
+      return;
+    }
+
+    this._populateTemaSelect('flashcards-select-tema-dropdown');
+    this.openModal('modal-flashcards-select-tema');
+  },
+
+  // Generar flashcards por tema con Gemini IA (temario oficial o tema personalizado con documentos)
+  async iniciarFlashcardsPorTema() {
+    const rawValue = document.getElementById('flashcards-select-tema-dropdown').value;
+    const temaOficial = TEMAS_OPOSICION.find(t => String(t.id) === rawValue);
+
+    this.closeModal('modal-flashcards-select-tema');
+
+    if (temaOficial) {
+      this.showLoading(`Generando flashcards del Tema ${temaOficial.numero} con Gemini AI...`);
+      try {
+        const response = await GeminiService.generarFlashcardsDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion);
+        this._aplicarFlashcardsGeneradas(response, temaOficial.id);
+      } catch (e) {
+        alert(`Error al generar las flashcards: ${e.message}`);
+      } finally {
+        this.hideLoading();
+      }
+      return;
+    }
+
+    // Tema personalizado: generar las flashcards a partir de sus documentos subidos
+    const temaPersonal = (this.db.temasPersonalizados || {})[rawValue];
+    if (!temaPersonal) return;
+
+    const archivos = (this.db.temario[rawValue] && this.db.temario[rawValue].archivos) || [];
+    if (archivos.length === 0) {
+      alert(`Sube al menos un documento a "${temaPersonal.titulo}" desde la pestaña Temario antes de generar flashcards sobre él.`);
+      return;
+    }
+
+    this.showLoading(`Descargando documentos de "${temaPersonal.titulo}" y generando flashcards con Gemini AI...`);
+    try {
+      const fileDataList = [];
+      let extractedTextCombined = '';
+
+      for (const archivo of archivos) {
+        const fileData = await FirebaseService.fetchFile(archivo.path);
+        if (!fileData || !fileData.content) continue;
+
+        if (archivo.name.toLowerCase().endsWith('.docx')) {
+          const binaryString = atob(fileData.content);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const text = await this.extractTextFromDocx(bytes.buffer);
+          extractedTextCombined += `\n\n--- ${archivo.name} ---\n${text}`;
+        } else {
+          fileDataList.push({ mimeType: archivo.type, base64: fileData.content });
+        }
+      }
+
+      if (fileDataList.length === 0 && !extractedTextCombined) {
+        throw new Error("No se pudo leer el contenido de los documentos subidos.");
+      }
+
+      const response = await GeminiService.generarFlashcardsDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null);
+      this._aplicarFlashcardsGeneradas(response, rawValue);
+    } catch (e) {
+      alert(`Error al generar las flashcards: ${e.message}`);
+    } finally {
+      this.hideLoading();
+    }
+  },
+
+  // Guardar las flashcards generadas en el banco permanente y mostrarlas de inmediato
+  _aplicarFlashcardsGeneradas(response, temaId) {
+    if (!response.flashcards || response.flashcards.length === 0) {
+      throw new Error("No se devolvieron flashcards válidas.");
+    }
+
+    if (!this.db.flashcardsGeneradas) this.db.flashcardsGeneradas = [];
+    const nuevas = response.flashcards.map(fc => ({
+      ...fc,
+      id: `${Date.now()}_${Math.random()}`,
+      temaId
+    }));
+    nuevas.forEach(fc => {
+      const exists = this.db.flashcardsGeneradas.some(g => g.anverso === fc.anverso);
+      if (!exists) this.db.flashcardsGeneradas.push(fc);
+    });
+    FirebaseService.saveDb(this.db);
+
+    this.switchTab('flashcards');
+
+    // Mostrar de inmediato el mazo recién generado (sin alterar el modo persistente Baraja/Difíciles)
+    document.getElementById('btn-flashcards-modo-normal').className = 'btn btn-secondary';
+    document.getElementById('btn-flashcards-modo-dificiles').className = 'btn btn-secondary';
+    document.getElementById('btn-flashcard-mark-dificil').style.display = 'inline-flex';
+    document.getElementById('btn-flashcard-mark-facil').style.display = 'none';
+
+    this.activeFlashcardDeck = nuevas.sort(() => 0.5 - Math.random());
+    this.activeFlashcardIndex = 0;
+    document.getElementById('lbl-dificiles-badge').innerText = this.db.flashcardsDificiles?.length || 0;
+    this.showFlashcard(0);
+  },
+
   buildFlashcardDeck() {
     let rawCards = [];
 
@@ -2758,9 +2584,12 @@ const app = {
 
     const card = this.activeFlashcardDeck[index];
     
-    // Determinar categoría
+    // Determinar categoría (tema oficial, tema personalizado o repaso general)
     const tema = TEMAS_OPOSICION.find(t => t.id === card.temaId);
-    const badgeText = tema ? `TEMA ${tema.numero}: ${tema.titulo}` : "REPASO RÁPIDO";
+    const temaPersonal = (this.db.temasPersonalizados || {})[card.temaId];
+    let badgeText = "REPASO RÁPIDO";
+    if (tema) badgeText = `TEMA ${tema.numero}: ${tema.titulo}`;
+    else if (temaPersonal) badgeText = temaPersonal.titulo.toUpperCase();
 
     document.getElementById('card-front-badge').innerText = badgeText;
     document.getElementById('card-back-badge').innerText = "RESPUESTA";
