@@ -1702,7 +1702,8 @@ const app = {
     if (temaOficial) {
       this.showLoading(`Generando test del Tema ${temaOficial.numero} con Gemini AI (esto puede tardar unos 10-15 segundos)...`);
       try {
-        const response = await GeminiService.generarTestDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion);
+        const preguntasExistentes = (this.db.preguntasGeneradas || []).filter(p => p.temaId === temaOficial.id);
+        const response = await GeminiService.generarTestDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion, preguntasExistentes);
 
         if (!response.preguntas || response.preguntas.length === 0) {
           throw new Error("No se devolvieron preguntas de test válidas.");
@@ -1771,7 +1772,8 @@ const app = {
         throw new Error("No se pudo leer el contenido de los documentos subidos.");
       }
 
-      const response = await GeminiService.generarTestDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null);
+      const preguntasExistentes = (this.db.preguntasGeneradas || []).filter(p => p.temaId === rawValue);
+      const response = await GeminiService.generarTestDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null, preguntasExistentes);
 
       if (!response.preguntas || response.preguntas.length === 0) {
         throw new Error("No se devolvieron preguntas de test válidas.");
@@ -2447,7 +2449,8 @@ const app = {
     if (temaOficial) {
       this.showLoading(`Generando flashcards del Tema ${temaOficial.numero} con Gemini AI...`);
       try {
-        const response = await GeminiService.generarFlashcardsDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion);
+        const anversosExistentes = (this.db.flashcardsGeneradas || []).filter(fc => fc.temaId === temaOficial.id).map(fc => fc.anverso);
+        const response = await GeminiService.generarFlashcardsDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion, anversosExistentes);
         this._aplicarFlashcardsGeneradas(response, temaOficial.id);
       } catch (e) {
         alert(`Error al generar las flashcards: ${e.message}`);
@@ -2493,7 +2496,8 @@ const app = {
         throw new Error("No se pudo leer el contenido de los documentos subidos.");
       }
 
-      const response = await GeminiService.generarFlashcardsDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null);
+      const anversosExistentes = (this.db.flashcardsGeneradas || []).filter(fc => fc.temaId === rawValue).map(fc => fc.anverso);
+      const response = await GeminiService.generarFlashcardsDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null, anversosExistentes);
       this._aplicarFlashcardsGeneradas(response, rawValue);
     } catch (e) {
       alert(`Error al generar las flashcards: ${e.message}`);

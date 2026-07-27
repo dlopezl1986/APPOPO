@@ -14,9 +14,19 @@ const GeminiService = {
     return !!this.getApiKey();
   },
 
+  // Construir el fragmento de prompt que pide a Gemini variar el contenido y no repetir
+  // lo ya generado antes para ese mismo tema (evita que salga siempre lo mismo).
+  _buildVarietyPrompt(existentes = [], label) {
+    if (!existentes || existentes.length === 0) return '';
+    // Limitamos la lista para no disparar el tamaño del prompt si ya hay muchas acumuladas
+    const lista = existentes.slice(-40).map(t => `- ${t}`).join('\n');
+    return `\n\nIMPORTANTE: Ya se han generado antes ${label} sobre este mismo tema. NO los repitas ni generes variaciones casi idénticas de ellos; céntrate en aspectos, artículos o matices distintos que aún no se hayan cubierto:\n${lista}`;
+  },
+
   // Hacer una consulta general a la API de Gemini.
   // fileData admite tanto un único objeto { mimeType, base64 } como un array de varios (multi-documento).
-  async _callGemini(prompt, fileData = null) {
+  // options.temperature permite aumentar la variedad de las respuestas (por defecto usa la del modelo).
+  async _callGemini(prompt, fileData = null, options = {}) {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error('Por favor, configura tu Gemini API Key en los ajustes.');
@@ -52,7 +62,8 @@ const GeminiService = {
         }
       ],
       generationConfig: {
-        responseMimeType: "application/json"
+        responseMimeType: "application/json",
+        ...(options.temperature !== undefined ? { temperature: options.temperature } : {})
       }
     };
 
@@ -97,7 +108,7 @@ const GeminiService = {
   },
 
   // Generar test de 15 preguntas a partir de uno o varios documentos de un tema personalizado
-  async generarTestDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null) {
+  async generarTestDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null, preguntasExistentes = []) {
     let prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple basadas EXCLUSIVAMENTE en el/los documento(s) adjuntos, que tratan sobre "${nombreTema}".
 Cada pregunta debe tener exactamente 3 opciones de respuesta (A, B, C) - que es el formato oficial de la Policía Nacional de España -, donde sólo una opción sea la correcta.
 La dificultad del examen debe ser media-alta, similar a la oposición real.
@@ -117,12 +128,14 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
       prompt += `\n\nContenido adicional en texto (extraído de documentos Word adjuntos):\n${extractedTextCombined}`;
     }
 
-    return await this._callGemini(prompt, fileDataList);
+    prompt += this._buildVarietyPrompt(preguntasExistentes.map(p => p.pregunta || p), 'estas preguntas');
+
+    return await this._callGemini(prompt, fileDataList, { temperature: 1.1 });
   },
 
   // Generar test rápido de 15 preguntas de un tema del temario oficial
-  async generarTestDeTema(temaNumero, temaTitulo, temaDescripcion) {
-    const prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple sobre el tema ${temaNumero}: "${temaTitulo}" de la oposición a la Policía Nacional de España (Escala Básica).
+  async generarTestDeTema(temaNumero, temaTitulo, temaDescripcion, preguntasExistentes = []) {
+    let prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple sobre el tema ${temaNumero}: "${temaTitulo}" de la oposición a la Policía Nacional de España (Escala Básica).
 Descripción de la materia: ${temaDescripcion}.
 Cada pregunta debe tener exactamente 3 opciones (A, B, C), de las cuales sólo una es correcta.
 Las preguntas deben tratar sobre leyes reales, plazos, competencias o conceptos sociológicos/técnicos aplicables a este tema específico según la normativa vigente en España.
@@ -138,7 +151,9 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
   ]
 }`;
 
-    return await this._callGemini(prompt);
+    prompt += this._buildVarietyPrompt(preguntasExistentes.map(p => p.pregunta || p), 'estas preguntas');
+
+    return await this._callGemini(prompt, null, { temperature: 1.1 });
   },
 
   // Generar flashcards de un documento
@@ -165,7 +180,7 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
   },
 
   // Generar flashcards a partir de uno o varios documentos de un tema personalizado
-  async generarFlashcardsDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null) {
+  async generarFlashcardsDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null, anversosExistentes = []) {
     let prompt = `Genera una lista de exactamente 12 a 15 flashcards (tarjetas de memoria de repaso rápido) basadas EXCLUSIVAMENTE en el/los documento(s) adjuntos, que tratan sobre "${nombreTema}".
 Estas tarjetas deben cubrir los términos clave, fechas, plazos, leyes o conceptos más importantes.
 El anverso de la tarjeta debe ser una pregunta directa o concepto corto. El reverso debe ser la respuesta concisa o definición del concepto.
@@ -183,12 +198,14 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
       prompt += `\n\nContenido adicional en texto (extraído de documentos Word adjuntos):\n${extractedTextCombined}`;
     }
 
-    return await this._callGemini(prompt, fileDataList);
+    prompt += this._buildVarietyPrompt(anversosExistentes, 'estas flashcards');
+
+    return await this._callGemini(prompt, fileDataList, { temperature: 1.1 });
   },
 
   // Generar flashcards de un tema específico
-  async generarFlashcardsDeTema(temaNumero, temaTitulo, temaDescripcion) {
-    const prompt = `Genera una lista de exactamente 12 a 15 flashcards de repaso rápido para el tema ${temaNumero}: "${temaTitulo}" de la oposición a la Policía Nacional de España.
+  async generarFlashcardsDeTema(temaNumero, temaTitulo, temaDescripcion, anversosExistentes = []) {
+    let prompt = `Genera una lista de exactamente 12 a 15 flashcards de repaso rápido para el tema ${temaNumero}: "${temaTitulo}" de la oposición a la Policía Nacional de España.
 Materia: ${temaDescripcion}.
 El anverso debe ser la pregunta corta (ej. plazos, artículos de leyes, definiciones clave) y el reverso la respuesta exacta y directa.
 El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
@@ -201,7 +218,9 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
   ]
 }`;
 
-    return await this._callGemini(prompt);
+    prompt += this._buildVarietyPrompt(anversosExistentes, 'estas flashcards');
+
+    return await this._callGemini(prompt, null, { temperature: 1.1 });
   },
 
   // Generar plan de estudio de 5 temas/día respetando agrupaciones y alternancia de bloques
