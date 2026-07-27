@@ -176,6 +176,7 @@ const app = {
 
     // Si la db está vacía en los campos clave, los rellenamos con la base de datos por defecto de los servicios
     if (!this.db.temario) this.db.temario = {};
+    if (!this.db.temasPersonalizados) this.db.temasPersonalizados = {};
     if (!this.db.calendario) this.db.calendario = {};
     if (!this.db.preguntasFalladas) this.db.preguntasFalladas = [];
     if (!this.db.flashcardsDificiles) this.db.flashcardsDificiles = [];
@@ -454,6 +455,18 @@ const app = {
   },
 
   // ================= PESTAÑA: TEMARIO =================
+  // Temario oficial + temas personalizados combinados, en el formato de tarjeta común
+  _getAllTemas() {
+    const personalizados = Object.values(this.db.temasPersonalizados || {}).map(t => ({
+      id: t.id,
+      categoria: t.categoria || 'Personalizado',
+      numero: null,
+      titulo: t.titulo,
+      descripcion: t.descripcion || ''
+    }));
+    return [...TEMAS_OPOSICION, ...personalizados];
+  },
+
   renderTemas() {
     const container = document.getElementById('temas-grid-container');
     if (!container) return;
@@ -461,8 +474,8 @@ const app = {
 
     // Filtrados
     const searchVal = (document.getElementById('search-temas')?.value || '').toLowerCase();
-    
-    TEMAS_OPOSICION.forEach(tema => {
+
+    this._getAllTemas().forEach(tema => {
       // Filtrado por categoría activa
       if (this.filterBlockActive && this.filterBlockActive !== 'Todos' && tema.categoria !== this.filterBlockActive) {
         return;
@@ -485,7 +498,7 @@ const app = {
       card.innerHTML = `
         <div class="tema-header">
           <span class="tema-badge-block">${tema.categoria}</span>
-          <span class="tema-number">Tema ${tema.numero}</span>
+          <span class="tema-number">${tema.numero ? `Tema ${tema.numero}` : 'Personalizado'}</span>
         </div>
         <h3 class="tema-title">${tema.titulo}</h3>
         <p class="tema-desc">${tema.descripcion}</p>
@@ -502,6 +515,18 @@ const app = {
       `;
       container.appendChild(card);
     });
+
+    // Tarjeta para añadir un tema personalizado nuevo
+    if (!this.filterBlockActive || this.filterBlockActive === 'Todos' || this.filterBlockActive === 'Personalizado') {
+      const addCard = document.createElement('div');
+      addCard.className = 'tema-card tema-card-add';
+      addCard.onclick = () => this.openNuevoTemaModal();
+      addCard.innerHTML = `
+        <svg viewBox="0 0 24 24" width="32" height="32"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        <span>Añadir Tema Personalizado</span>
+      `;
+      container.appendChild(addCard);
+    }
   },
 
   filterBlockActive: 'Todos',
@@ -510,12 +535,13 @@ const app = {
     document.querySelectorAll('.filter-btn').forEach(btn => {
       btn.classList.remove('active');
     });
-    
+
     const btnIdMap = {
       'Todos': 'btn-filter-todos',
       'Jurídicas': 'btn-filter-juridicas',
       'Sociales': 'btn-filter-sociales',
-      'Técnicas': 'btn-filter-tecnicas'
+      'Técnicas': 'btn-filter-tecnicas',
+      'Personalizado': 'btn-filter-personalizados'
     };
     document.getElementById(btnIdMap[block])?.classList.add('active');
     this.renderTemas();
@@ -528,20 +554,89 @@ const app = {
   // Modal Detalle de Tema
   openTemaDetail(temaId) {
     this.selectedTemaId = temaId;
-    const tema = TEMAS_OPOSICION.find(t => t.id === temaId);
-    if (!tema) return;
+    let tema = TEMAS_OPOSICION.find(t => t.id === temaId);
+    let esPersonalizado = false;
+
+    if (!tema) {
+      const personal = (this.db.temasPersonalizados || {})[temaId];
+      if (!personal) return;
+      tema = { numero: null, titulo: personal.titulo, descripcion: personal.descripcion || 'Tema personalizado sin descripción.' };
+      esPersonalizado = true;
+    }
 
     const prog = this.db.temario[temaId] || { vueltas: 0, archivos: [] };
 
-    document.getElementById('modal-tema-title').innerText = `Tema ${tema.numero}: ${tema.titulo}`;
+    document.getElementById('modal-tema-title').innerText = tema.numero ? `Tema ${tema.numero}: ${tema.titulo}` : tema.titulo;
     document.getElementById('modal-tema-desc').innerText = tema.descripcion;
     document.getElementById('modal-tema-vueltas-val').innerText = prog.vueltas;
     document.getElementById('modal-tema-docs-val').innerText = prog.archivos?.length || 0;
+
+    const btnDelete = document.getElementById('btn-tema-detail-delete');
+    if (btnDelete) btnDelete.style.display = esPersonalizado ? 'inline-flex' : 'none';
 
     // Renderizar documentos
     this.renderTemaDocsList(prog.archivos || []);
 
     this.openModal('modal-tema-detail');
+  },
+
+  // Abrir modal de creación de tema personalizado
+  openNuevoTemaModal() {
+    document.getElementById('nuevo-tema-titulo').value = '';
+    document.getElementById('nuevo-tema-descripcion').value = '';
+    this.openModal('modal-nuevo-tema');
+  },
+
+  async crearTemaPersonalizado() {
+    const titulo = document.getElementById('nuevo-tema-titulo').value.trim();
+    const descripcion = document.getElementById('nuevo-tema-descripcion').value.trim();
+
+    if (!titulo) {
+      alert('Escribe un título para el nuevo tema.');
+      return;
+    }
+
+    if (!this.db.temasPersonalizados) this.db.temasPersonalizados = {};
+
+    const id = `custom_${Date.now()}`;
+    this.db.temasPersonalizados[id] = { id, titulo, descripcion, categoria: 'Personalizado' };
+
+    await FirebaseService.saveDb(this.db);
+    this.closeModal('modal-nuevo-tema');
+    this.renderTemas();
+
+    // Abrir directamente el detalle para poder subir el primer documento
+    this.openTemaDetail(id);
+  },
+
+  async eliminarTemaPersonalizado() {
+    const temaId = this.selectedTemaId;
+    if (!temaId || !this.db.temasPersonalizados || !this.db.temasPersonalizados[temaId]) return;
+    if (!confirm('¿Seguro que deseas eliminar este tema personalizado? Se perderán sus documentos y su progreso asociado.')) return;
+
+    const archivos = (this.db.temario[temaId] && this.db.temario[temaId].archivos) || [];
+    this.showLoading('Eliminando tema personalizado...');
+    try {
+      for (const archivo of archivos) {
+        try {
+          await FirebaseService.deleteFile(archivo.path);
+        } catch (e) {
+          console.error('Error al eliminar archivo del tema personalizado:', e);
+        }
+      }
+
+      delete this.db.temasPersonalizados[temaId];
+      delete this.db.temario[temaId];
+
+      await FirebaseService.saveDb(this.db);
+      this.closeModal('modal-tema-detail');
+      this.renderTemas();
+      alert('Tema personalizado eliminado.');
+    } catch (e) {
+      alert(`Error al eliminar el tema: ${e.message}`);
+    } finally {
+      this.hideLoading();
+    }
   },
 
   renderTemaDocsList(archivos) {
@@ -1284,11 +1379,15 @@ const app = {
         }
       }
     } else {
+      const esWord = resolvedType.includes('wordprocessingml') || resolvedType === 'application/msword' || name.toLowerCase().endsWith('.docx') || name.toLowerCase().endsWith('.doc');
+      const mensaje = esWord
+        ? 'Los documentos Word no se pueden mostrar visualmente dentro de la app (el navegador no tiene un visor integrado para ellos), pero sí se usan igualmente para generar tests con IA. Pulsa el botón de abajo para descargarlo y abrirlo.'
+        : `Este formato (${type}) no se puede previsualizar en pantalla. Pulsa el botón de abajo para descargarlo.`;
       content.innerHTML = `
         <div style="color:var(--text-muted); padding:32px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px;">
           <svg viewBox="0 0 24 24" width="48" height="48" style="fill:currentColor; color:var(--text-muted);"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-          <p style="font-size:14px; font-weight:600; color:#fff; margin:0;">Previsualización no soportada</p>
-          <p style="font-size:12px; margin:0; max-width:280px;">Este formato (${type}) no se puede previsualizar en pantalla. Pulsa el botón de abajo para descargarlo.</p>
+          <p style="font-size:14px; font-weight:600; color:#fff; margin:0;">${esWord ? 'Previsualización no disponible para Word' : 'Previsualización no soportada'}</p>
+          <p style="font-size:12px; margin:0; max-width:320px;">${mensaje}</p>
         </div>
       `;
     }
@@ -1567,35 +1666,119 @@ const app = {
 
     const select = document.getElementById('test-select-tema-dropdown');
     select.innerHTML = '';
-    
+
+    const groupOficial = document.createElement('optgroup');
+    groupOficial.label = 'Temario Oficial';
     TEMAS_OPOSICION.forEach(tema => {
       const opt = document.createElement('option');
-      opt.value = tema.id;
+      opt.value = String(tema.id);
       opt.innerText = `Tema ${tema.numero}: ${tema.titulo}`;
-      select.appendChild(opt);
+      groupOficial.appendChild(opt);
     });
+    select.appendChild(groupOficial);
+
+    const personalizados = Object.values(this.db.temasPersonalizados || {});
+    if (personalizados.length > 0) {
+      const groupPersonal = document.createElement('optgroup');
+      groupPersonal.label = 'Mis Temas Personalizados';
+      personalizados.forEach(tema => {
+        const opt = document.createElement('option');
+        opt.value = tema.id;
+        const docsCount = (this.db.temario[tema.id]?.archivos || []).length;
+        opt.innerText = `${tema.titulo} (${docsCount} doc${docsCount === 1 ? '' : 's'})`;
+        groupPersonal.appendChild(opt);
+      });
+      select.appendChild(groupPersonal);
+    }
 
     this.openModal('modal-test-select-tema');
   },
 
-  // Generar test por tema con Gemini IA
-  // Generar test por tema con Gemini IA
+  // Generar test por tema con Gemini IA (temario oficial o tema personalizado con documentos)
   async iniciarTestPorTema() {
-    const temaId = parseInt(document.getElementById('test-select-tema-dropdown').value);
-    const tema = TEMAS_OPOSICION.find(t => t.id === temaId);
-    if (!tema) return;
+    const rawValue = document.getElementById('test-select-tema-dropdown').value;
+    const temaOficial = TEMAS_OPOSICION.find(t => String(t.id) === rawValue);
 
     this.closeModal('modal-test-select-tema');
-    this.showLoading(`Generando test del Tema ${tema.numero} con Gemini AI (esto puede tardar unos 10-15 segundos)...`);
 
+    if (temaOficial) {
+      this.showLoading(`Generando test del Tema ${temaOficial.numero} con Gemini AI (esto puede tardar unos 10-15 segundos)...`);
+      try {
+        const response = await GeminiService.generarTestDeTema(temaOficial.numero, temaOficial.titulo, temaOficial.descripcion);
+
+        if (!response.preguntas || response.preguntas.length === 0) {
+          throw new Error("No se devolvieron preguntas de test válidas.");
+        }
+
+        // Guardar las preguntas generadas en el banco general permanente para test aleatorio
+        if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
+        response.preguntas.forEach(q => {
+          const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
+          if (!exists) {
+            this.db.preguntasGeneradas.push({
+              ...q,
+              id: Date.now() + Math.random(),
+              temaId: temaOficial.id
+            });
+          }
+        });
+        await FirebaseService.saveDb(this.db);
+
+        this.activeExam.tipoExamen = 'tema';
+        this.activeExam.temaId = temaOficial.id;
+        this.activeExam.questions = response.preguntas.slice(0, 15);
+
+        this.iniciarInterfazExamen();
+      } catch (e) {
+        alert(`Error al generar el test por IA: ${e.message}`);
+      } finally {
+        this.hideLoading();
+      }
+      return;
+    }
+
+    // Tema personalizado: generar el test a partir de sus documentos subidos
+    const temaPersonal = (this.db.temasPersonalizados || {})[rawValue];
+    if (!temaPersonal) return;
+
+    const archivos = (this.db.temario[rawValue] && this.db.temario[rawValue].archivos) || [];
+    if (archivos.length === 0) {
+      alert(`Sube al menos un documento a "${temaPersonal.titulo}" desde la pestaña Temario antes de generar un test sobre él.`);
+      return;
+    }
+
+    this.showLoading(`Descargando documentos de "${temaPersonal.titulo}" y generando test con Gemini AI...`);
     try {
-      const response = await GeminiService.generarTestDeTema(tema.numero, tema.titulo, tema.descripcion);
-      
+      const fileDataList = [];
+      let extractedTextCombined = '';
+
+      for (const archivo of archivos) {
+        const fileData = await FirebaseService.fetchFile(archivo.path);
+        if (!fileData || !fileData.content) continue;
+
+        if (archivo.name.toLowerCase().endsWith('.docx')) {
+          const binaryString = atob(fileData.content);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const text = await this.extractTextFromDocx(bytes.buffer);
+          extractedTextCombined += `\n\n--- ${archivo.name} ---\n${text}`;
+        } else {
+          fileDataList.push({ mimeType: archivo.type, base64: fileData.content });
+        }
+      }
+
+      if (fileDataList.length === 0 && !extractedTextCombined) {
+        throw new Error("No se pudo leer el contenido de los documentos subidos.");
+      }
+
+      const response = await GeminiService.generarTestDesdeDocumentosTema(temaPersonal.titulo, fileDataList, extractedTextCombined || null);
+
       if (!response.preguntas || response.preguntas.length === 0) {
         throw new Error("No se devolvieron preguntas de test válidas.");
       }
 
-      // Guardar las preguntas generadas en el banco general permanente para test aleatorio
       if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
       response.preguntas.forEach(q => {
         const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
@@ -1603,14 +1786,14 @@ const app = {
           this.db.preguntasGeneradas.push({
             ...q,
             id: Date.now() + Math.random(),
-            temaId: temaId
+            temaId: rawValue
           });
         }
       });
       await FirebaseService.saveDb(this.db);
 
       this.activeExam.tipoExamen = 'tema';
-      this.activeExam.temaId = temaId;
+      this.activeExam.temaId = rawValue;
       this.activeExam.questions = response.preguntas.slice(0, 15);
 
       this.iniciarInterfazExamen();

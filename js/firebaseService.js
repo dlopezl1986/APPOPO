@@ -231,6 +231,7 @@ const FirebaseService = {
   _getDefaultDb() {
     return {
       temario: {}, // temaId -> { vueltas: 0, archivos: [] }
+      temasPersonalizados: {}, // temaId (custom_...) -> { id, titulo, descripcion, categoria }
       calendario: {}, // YYYY-MM-DD -> { notas: "", archivos: [], temasEstudiados: [] }
       planEstudio: null, // { fechaInicio, distribucion: { YYYY-MM-DD: [temaId, temaId...] } }
       preguntasFalladas: [], // array de { id, temaId, temaTitulo, pregunta, opciones, respuestaCorrecta, explicacion, fallasCount }

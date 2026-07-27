@@ -108,6 +108,10 @@
             <h1>Temario Oposición</h1>
             <p>Sube documentación para cada tema y realiza su seguimiento.</p>
           </div>
+          <button class="btn btn-primary" onclick="app.openNuevoTemaModal()">
+            <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor; vertical-align: middle;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            Añadir Tema
+          </button>
         </div>
 
         <div class="search-filter-bar">
@@ -120,6 +124,7 @@
             <button class="filter-btn" id="btn-filter-juridicas" onclick="app.filterTemasBlock('Jurídicas')">Jurídicas</button>
             <button class="filter-btn" id="btn-filter-sociales" onclick="app.filterTemasBlock('Sociales')">Sociales</button>
             <button class="filter-btn" id="btn-filter-tecnicas" onclick="app.filterTemasBlock('Técnicas')">Técnicas</button>
+            <button class="filter-btn" id="btn-filter-personalizados" onclick="app.filterTemasBlock('Personalizado')">Personalizados</button>
           </div>
         </div>
 
@@ -569,7 +574,33 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-danger" id="btn-tema-detail-delete" style="display:none;" onclick="app.eliminarTemaPersonalizado()">Eliminar Tema</button>
         <button class="btn btn-secondary" onclick="app.closeModal('modal-tema-detail')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2b. MODAL: Crear Tema Personalizado -->
+  <div class="modal-overlay" id="modal-nuevo-tema">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title">Nuevo Tema Personalizado</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-nuevo-tema')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nuevo-tema-titulo">Título del tema</label>
+          <input type="text" id="nuevo-tema-titulo" class="form-control" placeholder="Ej. Apuntes de la academia sobre defensa personal">
+        </div>
+        <div class="form-group">
+          <label for="nuevo-tema-descripcion">Descripción (opcional)</label>
+          <textarea id="nuevo-tema-descripcion" class="form-control" rows="3" placeholder="Breve descripción del contenido..."></textarea>
+        </div>
+        <p class="form-help">Después de crear el tema podrás subir uno o varios documentos y generar un test con IA basado exclusivamente en ellos, desde "Test por Tema".</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-nuevo-tema')">Cancelar</button>
+        <button class="btn btn-primary" onclick="app.crearTemaPersonalizado()">Crear Tema</button>
       </div>
     </div>
   </div>

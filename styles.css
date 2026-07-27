@@ -549,6 +549,7 @@ body {
 .tema-card.juridicas::before { background: #3b82f6; }
 .tema-card.sociales::before { background: #8b5cf6; }
 .tema-card.tecnicas::before { background: var(--color-accent); }
+.tema-card.personalizado::before { background: #10b981; }
 
 .tema-header {
   display: flex;
@@ -569,6 +570,31 @@ body {
 .juridicas .tema-badge-block { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
 .sociales .tema-badge-block { background: rgba(139, 92, 246, 0.1); color: #a78bfa; }
 .tecnicas .tema-badge-block { background: rgba(229, 169, 60, 0.1); color: #fbbf24; }
+.personalizado .tema-badge-block { background: rgba(16, 185, 129, 0.1); color: #34d399; }
+
+.tema-card-add {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 160px;
+  background: transparent;
+  border: 1px dashed var(--border-glass);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tema-card-add:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(229, 169, 60, 0.03);
+  transform: none;
+  box-shadow: none;
+}
+
+.tema-card-add svg {
+  fill: currentColor;
+}
 
 .tema-number {
   font-size: 13px;

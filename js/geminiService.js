@@ -1,7 +1,7 @@
 const GeminiService = {
   // Obtener API Key de localStorage
   getApiKey() {
-    return localStorage.getItem('appopo_gemini_key') || atob('QVEuQWI4Uk42SU1XMjFlcHZoUldONTFPS0k5X2hxV2wyWXo2QVNZdnpXVTBfYmxubkRCWXc=');
+    return localStorage.getItem('appopo_gemini_key') || '';
   },
 
   // Guardar API Key en localStorage
@@ -14,7 +14,8 @@ const GeminiService = {
     return !!this.getApiKey();
   },
 
-  // Hacer una consulta general a la API de Gemini
+  // Hacer una consulta general a la API de Gemini.
+  // fileData admite tanto un único objeto { mimeType, base64 } como un array de varios (multi-documento).
   async _callGemini(prompt, fileData = null) {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -26,15 +27,18 @@ const GeminiService = {
 
     const parts = [];
 
-    // Si hay un archivo adjunto
-    if (fileData) {
-      parts.push({
-        inlineData: {
-          mimeType: fileData.mimeType,
-          data: fileData.base64
-        }
-      });
-    }
+    // Si hay uno o varios archivos adjuntos
+    const fileDataList = Array.isArray(fileData) ? fileData : (fileData ? [fileData] : []);
+    fileDataList.forEach(fd => {
+      if (fd && fd.mimeType && fd.base64) {
+        parts.push({
+          inlineData: {
+            mimeType: fd.mimeType,
+            data: fd.base64
+          }
+        });
+      }
+    });
 
     // Añadir el prompt de texto
     parts.push({
@@ -121,6 +125,30 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
     };
 
     return await this._callGemini(prompt, fileData);
+  },
+
+  // Generar test de 15 preguntas a partir de uno o varios documentos de un tema personalizado
+  async generarTestDesdeDocumentosTema(nombreTema, fileDataList = [], extractedTextCombined = null) {
+    let prompt = `Genera un examen tipo test de exactamente 15 preguntas de opción múltiple basadas EXCLUSIVAMENTE en el/los documento(s) adjuntos, que tratan sobre "${nombreTema}".
+Cada pregunta debe tener exactamente 3 opciones de respuesta (A, B, C) - que es el formato oficial de la Policía Nacional de España -, donde sólo una opción sea la correcta.
+La dificultad del examen debe ser media-alta, similar a la oposición real.
+El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
+{
+  "preguntas": [
+    {
+      "pregunta": "Enunciado de la pregunta...",
+      "opciones": ["Opción A...", "Opción B...", "Opción C..."],
+      "respuestaCorrecta": 0,
+      "explicacion": "Explicación detallada de por qué es la opción correcta."
+    }
+  ]
+}`;
+
+    if (extractedTextCombined) {
+      prompt += `\n\nContenido adicional en texto (extraído de documentos Word adjuntos):\n${extractedTextCombined}`;
+    }
+
+    return await this._callGemini(prompt, fileDataList);
   },
 
   // Generar test rápido de 15 preguntas de un tema del temario oficial
