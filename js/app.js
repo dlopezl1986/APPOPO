@@ -1899,6 +1899,12 @@ const app = {
         totalExtraidas += preguntas.length;
 
         preguntas.forEach(q => {
+          // Formato oficial de la Policía Nacional: siempre exactamente 3 opciones (A, B, C)
+          if (q.opciones && q.opciones.length > 3) {
+            q.opciones = q.opciones.slice(0, 3);
+            if (q.respuestaCorrecta > 2) q.respuestaCorrecta = 0;
+          }
+
           const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
           if (!exists) {
             this.db.preguntasGeneradas.push({
@@ -2041,6 +2047,7 @@ const app = {
     const optionsContainer = document.getElementById('q-options-container');
     optionsContainer.innerHTML = '';
 
+    const letters = ["A", "B", "C"];
     q.opciones.forEach((opcionText, oIdx) => {
       const btn = document.createElement('button');
 
@@ -2049,7 +2056,7 @@ const app = {
       btn.onclick = () => this.selectOption(oIdx);
 
       btn.innerHTML = `
-        <span class="option-letter">${String.fromCharCode(65 + oIdx)}</span>
+        <span class="option-letter">${letters[oIdx]}</span>
         <span class="option-text">${opcionText}</span>
       `;
       optionsContainer.appendChild(btn);
@@ -2206,7 +2213,7 @@ const app = {
     const container = document.getElementById('results-review-container');
     container.innerHTML = '';
 
-    const letters = ["A", "B", "C", "D", "E", "F"];
+    const letters = ["A", "B", "C"];
 
     this.currentExamReviewQuestions.forEach((q, idx) => {
       const item = document.createElement('div');

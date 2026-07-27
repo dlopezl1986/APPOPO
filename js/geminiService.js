@@ -99,8 +99,11 @@ const GeminiService = {
 
   // Extraer preguntas ya existentes (no generar nuevas) de un examen subido en PDF/Word/imagen
   async extraerPreguntasDeDocumento(fileDataList = [], extractedTextCombined = null) {
-    let prompt = `Analiza en detalle el/los documento(s) adjuntos, que contienen un examen o listado de preguntas tipo test ya elaborado.
-Extrae TODAS las preguntas de opción múltiple que encuentres, transcribiendo el enunciado y las opciones EXACTAMENTE tal y como aparecen en el documento. No inventes preguntas nuevas ni cambies su redacción.
+    let prompt = `Analiza en detalle el/los documento(s) adjuntos, que contienen un examen o listado de preguntas tipo test ya elaborado para la oposición a la Policía Nacional de España.
+Extrae TODAS las preguntas de opción múltiple que encuentres, transcribiendo el enunciado EXACTAMENTE tal y como aparece en el documento. No inventes preguntas nuevas ni cambies su redacción.
+Los exámenes oficiales de la Policía Nacional tienen SIEMPRE exactamente 3 opciones de respuesta (A, B, C). Cada pregunta que extraigas debe tener exactamente esas 3 opciones:
+- Si el documento ya presenta 3 opciones, transcríbelas tal cual.
+- Si por algún error de formato del documento aparecieran más de 3, quédate solo con las 3 que tengan sentido como respuestas reales de esa pregunta y descarta el resto.
 Para cada pregunta:
 - Si el documento incluye una plantilla o clave de respuestas correctas, úsala para marcar con total fiabilidad cuál opción es la correcta, y pon "revisar": false.
 - Si el documento NO indica la respuesta correcta, determínala tú mismo aplicando tu propio conocimiento de la materia, y pon "revisar": true para avisar de que conviene revisarla manualmente.
