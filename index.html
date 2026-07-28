@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APPOPO - Tu Oposición Policía Nacional</title>
-  <link rel="stylesheet" href="styles.css?v=2.8">
+  <link rel="stylesheet" href="styles.css?v=2.9">
 
   <!-- PWA: instalable y con modo offline -->
   <link rel="manifest" href="manifest.json">
@@ -196,7 +196,7 @@
         <div class="section-header" id="test-main-header">
           <div class="section-info">
             <h1>Simulador de Test</h1>
-            <p>Practica exámenes de 15 preguntas generados automáticamente o basados en tus archivos.</p>
+            <p>Practica con simulacros de examen, tests por bloque o tests generados con IA a partir de tus archivos.</p>
           </div>
         </div>
 
@@ -208,7 +208,15 @@
                 <svg viewBox="0 0 24 24"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.44l2.04 2.04V4h-5.5zm.09 7.59l1.42-1.41 3.99 3.99V20h-5.5l2.04-2.04-3.95-3.95z"/></svg>
               </div>
               <h3 class="test-card-title">Test Aleatorio</h3>
-              <p class="test-card-desc">15 preguntas rápidas seleccionadas al azar de todo tu temario base.</p>
+              <p class="test-card-desc">Simulacro de hasta 100 preguntas de todo el temario, como en el examen real, dando más peso a los temas más importantes.</p>
+            </div>
+
+            <div class="test-selection-card" onclick="app.openTestPorBloqueModal()">
+              <div class="test-card-icon">
+                <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+              </div>
+              <h3 class="test-card-title">Test por Bloques</h3>
+              <p class="test-card-desc">Practica un bloque concreto: Jurídicas, Sociales o Técnicas.</p>
             </div>
 
             <div class="test-selection-card" onclick="app.openTestPorTemaModal()">
@@ -784,6 +792,27 @@
     </div>
   </div>
 
+  <!-- 4c. MODAL: Selector de Bloque para Test por Bloque -->
+  <div class="modal-overlay" id="modal-test-select-bloque">
+    <div class="modal-container" style="max-width:420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Test por Bloque</h3>
+        <button class="modal-close" onclick="app.closeModal('modal-test-select-bloque')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Elige un bloque del temario. Se generará un test de 15 preguntas de tu banco acumulado, con más presencia de los temas más importantes de ese bloque.</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button class="btn btn-secondary" style="width:100%; justify-content:flex-start; padding:14px 16px;" onclick="app.iniciarTestPorBloque('Jurídicas')">Bloque I · Ciencias Jurídicas</button>
+          <button class="btn btn-secondary" style="width:100%; justify-content:flex-start; padding:14px 16px;" onclick="app.iniciarTestPorBloque('Sociales')">Bloque II · Ciencias Sociales</button>
+          <button class="btn btn-secondary" style="width:100%; justify-content:flex-start; padding:14px 16px;" onclick="app.iniciarTestPorBloque('Técnicas')">Bloque III · Materias Técnico-Científicas</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="app.closeModal('modal-test-select-bloque')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 4b. MODAL: Selector de Tema para Generar Flashcards por IA -->
   <div class="modal-overlay" id="modal-flashcards-select-tema">
     <div class="modal-container">
@@ -817,7 +846,7 @@
       <div class="modal-body">
         <div class="tema-detail-container">
           <p style="font-size:13px; color:var(--text-muted); line-height:1.5;">
-            Sube uno o varios exámenes en PDF, Word o imagen. Gemini extraerá las preguntas de opción múltiple tal y como aparecen (usando la plantilla de respuestas si la incluyes) y las añadirá a tu banco de preguntas, disponible en "Test Aleatorio" y "Preguntas de IA".
+            Sube uno o varios exámenes en PDF, Word o imagen (puedes seleccionarlos todos a la vez desde una misma carpeta). Gemini extraerá las preguntas de opción múltiple tal y como aparecen (usando la plantilla de respuestas si la incluyes), las clasificará por tema y las añadirá a tu banco de preguntas, disponible en "Test Aleatorio", "Test por Bloques" y "Preguntas de IA".
           </p>
 
           <div class="doc-upload-zone" onclick="document.getElementById('input-subir-preguntas').click()">
@@ -924,10 +953,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js?v=2.8"></script>
-  <script src="js/firebaseService.js?v=2.8"></script>
-  <script src="js/geminiService.js?v=2.8"></script>
-  <script src="js/app.js?v=2.8"></script>
+  <script src="js/temarioBase.js?v=2.9"></script>
+  <script src="js/firebaseService.js?v=2.9"></script>
+  <script src="js/geminiService.js?v=2.9"></script>
+  <script src="js/app.js?v=2.9"></script>
 
 </body>
 </html>

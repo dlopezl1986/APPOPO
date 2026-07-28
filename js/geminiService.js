@@ -98,7 +98,9 @@ const GeminiService = {
   },
 
   // Extraer preguntas ya existentes (no generar nuevas) de un examen subido en PDF/Word/imagen
-  async extraerPreguntasDeDocumento(fileDataList = [], extractedTextCombined = null) {
+  async extraerPreguntasDeDocumento(fileDataList = [], extractedTextCombined = null, temasOficiales = []) {
+    const temarioResumen = temasOficiales.map(t => `${t.id}: Tema ${t.numero} - ${t.titulo} (Bloque ${t.categoria})`).join('\n');
+
     let prompt = `Analiza en detalle el/los documento(s) adjuntos, que contienen un examen o listado de preguntas tipo test ya elaborado para la oposición a la Policía Nacional de España.
 Extrae TODAS las preguntas de opción múltiple que encuentres, transcribiendo el enunciado EXACTAMENTE tal y como aparece en el documento. No inventes preguntas nuevas ni cambies su redacción.
 Los exámenes oficiales de la Policía Nacional tienen SIEMPRE exactamente 3 opciones de respuesta (A, B, C). Cada pregunta que extraigas debe tener exactamente esas 3 opciones:
@@ -107,7 +109,9 @@ Los exámenes oficiales de la Policía Nacional tienen SIEMPRE exactamente 3 opc
 Para cada pregunta:
 - Si el documento incluye una plantilla o clave de respuestas correctas, úsala para marcar con total fiabilidad cuál opción es la correcta, y pon "revisar": false.
 - Si el documento NO indica la respuesta correcta, determínala tú mismo aplicando tu propio conocimiento de la materia, y pon "revisar": true para avisar de que conviene revisarla manualmente.
-Incluye siempre una breve explicación de por qué esa opción es la correcta.
+Incluye siempre una breve explicación de por qué esa opción es la correcta.${temarioResumen ? `
+Además, clasifica cada pregunta según el tema oficial del temario al que pertenece por su contenido. Usa el ID numérico EXACTO de esta lista en el campo "temaId" (si el contenido no encaja claramente en ninguno, pon "temaId": null):
+${temarioResumen}` : ''}
 El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
 {
   "preguntas": [
@@ -116,7 +120,8 @@ El formato de respuesta DEBE SER UN OBJETO JSON estructurado exactamente así:
       "opciones": ["Opción 1...", "Opción 2...", "Opción 3..."],
       "respuestaCorrecta": 0,
       "explicacion": "...",
-      "revisar": false
+      "revisar": false,
+      "temaId": 9
     }
   ]
 }

@@ -1832,19 +1832,73 @@ const app = {
   },
 
   // Examen de 15 Preguntas Aleatorias
+  // Selecciona preguntas de un pool respetando el "peso" (importancia) de cada tema, para que los
+  // temas más preguntados en el examen real tengan más presencia. Si algún tema no tiene suficientes
+  // preguntas acumuladas todavía, se rellena el resto con cualquier otra pregunta disponible del pool
+  // (incluidas las de exámenes subidos sin clasificar) para acercarse siempre a la cantidad objetivo.
+  _seleccionarPreguntasPonderadas(temas, pool, cantidadObjetivo) {
+    const pesoTotal = temas.reduce((sum, t) => sum + (t.peso || 1), 0) || 1;
+    const usadas = new Set();
+    const seleccionadas = [];
+
+    temas.forEach(t => {
+      const objetivo = Math.round(((t.peso || 1) / pesoTotal) * cantidadObjetivo);
+      const disponibles = pool.filter(q => q.temaId === t.id && !usadas.has(q)).sort(() => 0.5 - Math.random());
+      disponibles.slice(0, objetivo).forEach(q => {
+        seleccionadas.push(q);
+        usadas.add(q);
+      });
+    });
+
+    const restantes = pool.filter(q => !usadas.has(q)).sort(() => 0.5 - Math.random());
+    for (const q of restantes) {
+      if (seleccionadas.length >= cantidadObjetivo) break;
+      seleccionadas.push(q);
+      usadas.add(q);
+    }
+
+    return seleccionadas.sort(() => 0.5 - Math.random()).slice(0, cantidadObjetivo);
+  },
+
+  // Simulacro de examen: hasta 100 preguntas repartidas entre todo el temario, dando más peso
+  // a los temas que las academias suelen destacar como más preguntados en el examen real.
   iniciarTestAleatorio() {
+    const pool = [...this.mockQuestions, ...(this.db.preguntasGeneradas || [])];
+
+    if (pool.length === 0) {
+      alert("Todavía no tienes preguntas en tu banco. Genera algún «Test por Tema» o sube preguntas de un examen para empezar a acumular preguntas.");
+      return;
+    }
+
     this.activeExam.tipoExamen = 'aleatorio';
     this.activeExam.temaId = null;
+    this.activeExam.questions = this._seleccionarPreguntasPonderadas(TEMAS_OPOSICION, pool, 100);
 
-    // Obtener preguntas base combinando mockQuestions y preguntasGeneradas por Gemini en la base de datos
-    const poolGeneradas = this.db.preguntasGeneradas || [];
-    const pool = [...this.mockQuestions, ...poolGeneradas];
-    
-    // Barajarlas de forma aleatoria
-    const shuffled = pool.sort(() => 0.5 - Math.random());
-    
-    // Seleccionar 15 (o las disponibles si son menos)
-    this.activeExam.questions = shuffled.slice(0, Math.min(15, shuffled.length));
+    this.iniciarInterfazExamen();
+  },
+
+  // Abrir el selector de bloque (Jurídicas / Sociales / Técnicas)
+  openTestPorBloqueModal() {
+    this.openModal('modal-test-select-bloque');
+  },
+
+  // Test centrado en un único bloque del temario, con la misma ponderación por importancia de tema
+  iniciarTestPorBloque(categoria) {
+    this.closeModal('modal-test-select-bloque');
+
+    const temasBloque = TEMAS_OPOSICION.filter(t => t.categoria === categoria);
+    const idsBloque = new Set(temasBloque.map(t => t.id));
+    const pool = [...this.mockQuestions, ...(this.db.preguntasGeneradas || [])].filter(q => idsBloque.has(q.temaId));
+
+    if (pool.length === 0) {
+      alert(`Todavía no tienes preguntas del bloque de ${categoria}. Genera algún «Test por Tema» de esta categoría, o sube exámenes que las incluyan, para empezar a acumular preguntas.`);
+      return;
+    }
+
+    this.activeExam.tipoExamen = 'bloque';
+    this.activeExam.temaId = null;
+    this.activeExam.bloque = categoria;
+    this.activeExam.questions = this._seleccionarPreguntasPonderadas(temasBloque, pool, 15);
 
     this.iniciarInterfazExamen();
   },
@@ -2090,7 +2144,7 @@ const app = {
           fileDataList.push({ mimeType: file.type || GeminiService._guessMimeType(file.name), base64 });
         }
 
-        const response = await GeminiService.extraerPreguntasDeDocumento(fileDataList, extractedText);
+        const response = await GeminiService.extraerPreguntasDeDocumento(fileDataList, extractedText, TEMAS_OPOSICION);
         const preguntas = response.preguntas || [];
         totalExtraidas += preguntas.length;
 
@@ -2101,12 +2155,15 @@ const app = {
             if (q.respuestaCorrecta > 2) q.respuestaCorrecta = 0;
           }
 
+          // Solo aceptamos el temaId si corresponde a un tema real del temario oficial
+          const temaValido = TEMAS_OPOSICION.some(t => t.id === q.temaId);
+
           const exists = this.db.preguntasGeneradas.some(pg => pg.pregunta === q.pregunta);
           if (!exists) {
             this.db.preguntasGeneradas.push({
               ...q,
               id: Date.now() + Math.random(),
-              temaId: null,
+              temaId: temaValido ? q.temaId : null,
               origen: 'examen_subido'
             });
             totalNuevas++;
@@ -2176,11 +2233,12 @@ const app = {
 
     // Establecer título del modo de examen
     const modeTitles = {
-      'aleatorio': 'Examen Aleatorio General',
+      'aleatorio': 'Simulacro de Examen (100 preguntas)',
       'tema': 'Examen de Tema Oficial (IA)',
       'documento': 'Examen desde tu Documento (IA)',
       'falladas': 'Test de Repaso de Preguntas Falladas',
-      'generadas': 'Examen Acumulado de Preguntas de IA'
+      'generadas': 'Examen Acumulado de Preguntas de IA',
+      'bloque': `Test por Bloque: ${this.activeExam.bloque || ''}`
     };
     document.getElementById('exam-mode-title').innerText = modeTitles[this.activeExam.tipoExamen];
 
@@ -2194,8 +2252,8 @@ const app = {
       dotsContainer.appendChild(dot);
     });
 
-    // Iniciar Temporizador (15 minutos = 900 segundos)
-    this.activeExam.timeRemaining = 900;
+    // Iniciar Temporizador: 1 minuto por pregunta (igual que en los simulacros de las academias)
+    this.activeExam.timeRemaining = this.activeExam.questions.length * 60;
     this.updateTimerClock();
     
     if (this.activeExam.timerInterval) clearInterval(this.activeExam.timerInterval);
