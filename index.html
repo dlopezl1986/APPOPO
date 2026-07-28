@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APPOPO - Tu Oposición Policía Nacional</title>
-  <link rel="stylesheet" href="styles.css?v=2.7">
+  <link rel="stylesheet" href="styles.css?v=2.8">
 
   <!-- PWA: instalable y con modo offline -->
   <link rel="manifest" href="manifest.json">
@@ -487,12 +487,29 @@
 
   <!-- Overlay de Acceso (Login / Registro con Firebase) -->
   <div id="auth-gate-overlay" style="display:flex; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,8,17,0.97); backdrop-filter:blur(8px); z-index:500; align-items:center; justify-content:center;">
-    <div class="modal-container" style="max-width:380px; width:90%;">
+    <div class="modal-container" style="max-width:400px; width:92%;">
       <div class="modal-header">
         <h3 class="modal-title">Acceder a APPOPO</h3>
       </div>
       <div class="modal-body">
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Inicia sesión con el mismo email y contraseña desde cualquier dispositivo para sincronizar tu progreso y documentos.</p>
+
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab-btn active" id="auth-tab-login" onclick="app.switchAuthMode('login')">Iniciar Sesión</button>
+          <button type="button" class="auth-tab-btn" id="auth-tab-register" onclick="app.switchAuthMode('register')">Crear Cuenta</button>
+        </div>
+
+        <p style="font-size:12px; color:var(--text-muted); margin:16px 0;" id="auth-mode-desc">Inicia sesión con tu email y contraseña para sincronizar tu progreso y documentos en cualquier dispositivo.</p>
+
+        <div id="auth-register-fields" style="display:none;">
+          <div class="form-group">
+            <label for="auth-nombre">Nombre</label>
+            <input type="text" id="auth-nombre" class="form-control" placeholder="Tu nombre" autocomplete="given-name">
+          </div>
+          <div class="form-group">
+            <label for="auth-apellidos">Apellidos</label>
+            <input type="text" id="auth-apellidos" class="form-control" placeholder="Tus apellidos" autocomplete="family-name">
+          </div>
+        </div>
 
         <div class="form-group">
           <label for="auth-email">Email</label>
@@ -500,18 +517,29 @@
         </div>
         <div class="form-group">
           <label for="auth-password">Contraseña</label>
-          <input type="password" id="auth-password" class="form-control" placeholder="Mínimo 6 caracteres" autocomplete="current-password">
+          <input type="password" id="auth-password" class="form-control" placeholder="Tu contraseña" autocomplete="current-password" oninput="app.checkPasswordRequirements('auth-password', 'auth-password-requirements')">
         </div>
+
+        <div class="form-group" id="auth-confirm-password-group" style="display:none;">
+          <label for="auth-confirm-password">Confirmar Contraseña</label>
+          <input type="password" id="auth-confirm-password" class="form-control" placeholder="Repite la contraseña" autocomplete="new-password">
+        </div>
+
+        <ul class="password-requirements" id="auth-password-requirements" style="display:none;">
+          <li data-rule="length">Mínimo 8 caracteres</li>
+          <li data-rule="upper">Una letra mayúscula</li>
+          <li data-rule="lower">Una letra minúscula</li>
+          <li data-rule="number">Un número</li>
+        </ul>
 
         <p id="auth-error-msg" style="display:none; color:var(--color-error); font-size:12px; margin-bottom:10px;"></p>
 
-        <p style="text-align:right; margin:0;">
+        <p style="text-align:right; margin:0;" id="auth-forgot-row">
           <a href="#" style="font-size:11px; color:var(--text-muted);" onclick="app.handleForgotPassword(); return false;">¿Olvidaste tu contraseña?</a>
         </p>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="app.handleRegister()">Crear Cuenta</button>
-        <button class="btn btn-primary" onclick="app.handleLogin()">Iniciar Sesión</button>
+      <div class="modal-footer" style="justify-content:stretch;">
+        <button class="btn btn-primary" id="auth-submit-btn" style="width:100%;" onclick="app.handleAuthSubmit()">Iniciar Sesión</button>
       </div>
     </div>
   </div>
@@ -535,6 +563,35 @@
           </p>
           <button class="btn btn-danger" style="width:100%; padding:8px 12px; font-size:12px; cursor:pointer;" onclick="app.handleLogout()">Cerrar Sesión</button>
         </div>
+
+        <h4 style="margin-top:24px; margin-bottom:12px; color:var(--color-accent); font-size:14px; text-transform:uppercase; letter-spacing:0.5px;">Seguridad de la Cuenta</h4>
+
+        <div class="form-group">
+          <label for="settings-current-password">Contraseña Actual</label>
+          <input type="password" id="settings-current-password" class="form-control" placeholder="Tu contraseña actual" autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label for="settings-new-password">Nueva Contraseña</label>
+          <input type="password" id="settings-new-password" class="form-control" placeholder="Mínimo 8 caracteres" autocomplete="new-password" oninput="app.checkPasswordRequirements('settings-new-password', 'settings-password-requirements')">
+        </div>
+        <div class="form-group">
+          <label for="settings-new-password-confirm">Confirmar Nueva Contraseña</label>
+          <input type="password" id="settings-new-password-confirm" class="form-control" placeholder="Repite la nueva contraseña" autocomplete="new-password">
+        </div>
+
+        <ul class="password-requirements" id="settings-password-requirements">
+          <li data-rule="length">Mínimo 8 caracteres</li>
+          <li data-rule="upper">Una letra mayúscula</li>
+          <li data-rule="lower">Una letra minúscula</li>
+          <li data-rule="number">Un número</li>
+        </ul>
+
+        <p id="settings-password-msg" style="display:none; font-size:12px; margin:10px 0;"></p>
+
+        <button class="btn btn-secondary" style="width:100%; margin-bottom:10px;" onclick="app.handleChangePassword()">Actualizar Contraseña</button>
+        <p style="text-align:center; margin:0 0 16px 0;">
+          <a href="#" style="font-size:11px; color:var(--text-muted);" onclick="app.handleForgotPasswordFromSettings(); return false;">¿No recuerdas tu contraseña actual? Enviar email de recuperación</a>
+        </p>
 
         <h4 style="margin-top:24px; margin-bottom:12px; color:var(--color-accent); font-size:14px; text-transform:uppercase; letter-spacing:0.5px;">Gemini AI (Generación de Tests y Flashcards)</h4>
 
@@ -867,10 +924,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js?v=2.7"></script>
-  <script src="js/firebaseService.js?v=2.7"></script>
-  <script src="js/geminiService.js?v=2.7"></script>
-  <script src="js/app.js?v=2.7"></script>
+  <script src="js/temarioBase.js?v=2.8"></script>
+  <script src="js/firebaseService.js?v=2.8"></script>
+  <script src="js/geminiService.js?v=2.8"></script>
+  <script src="js/app.js?v=2.8"></script>
 
 </body>
 </html>

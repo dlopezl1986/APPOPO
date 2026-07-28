@@ -58,9 +58,12 @@ const FirebaseService = {
     return (this._auth && this._auth.currentUser) ? this._auth.currentUser.email : '';
   },
 
-  async register(email, password) {
+  async register(email, password, displayName) {
     this.init();
     const cred = await this._auth.createUserWithEmailAndPassword(email.trim(), password);
+    if (displayName) {
+      await cred.user.updateProfile({ displayName });
+    }
     return cred.user;
   },
 
@@ -78,6 +81,18 @@ const FirebaseService = {
   async resetPassword(email) {
     this.init();
     await this._auth.sendPasswordResetEmail(email.trim());
+  },
+
+  // Cambiar la contraseña del usuario autenticado, reautenticándolo primero por seguridad
+  async changePassword(currentPassword, newPassword) {
+    this.init();
+    const user = this._auth.currentUser;
+    if (!user) {
+      throw new Error('Debes iniciar sesión para cambiar tu contraseña.');
+    }
+    const credential = firebase.auth.EmailAuthProvider.credential(user.email, currentPassword);
+    await user.reauthenticateWithCredential(credential);
+    await user.updatePassword(newPassword);
   },
 
   _uid() {

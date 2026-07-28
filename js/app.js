@@ -113,6 +113,7 @@ const app = {
   // ================= INICIALIZACIÓN DE LA APP =================
   async init() {
     this.showLoading("Conectando...");
+    this.switchAuthMode('login');
     FirebaseService.init();
 
     // Reaccionar en tiempo real a inicios/cierres de sesión
@@ -244,6 +245,39 @@ const app = {
   },
 
   // ================= ACCESO (LOGIN / REGISTRO CON FIREBASE) =================
+  authMode: 'login',
+
+  switchAuthMode(mode) {
+    this.authMode = mode;
+    const isRegister = mode === 'register';
+
+    document.getElementById('auth-tab-login').classList.toggle('active', !isRegister);
+    document.getElementById('auth-tab-register').classList.toggle('active', isRegister);
+    document.getElementById('auth-register-fields').style.display = isRegister ? 'block' : 'none';
+    document.getElementById('auth-confirm-password-group').style.display = isRegister ? 'block' : 'none';
+    document.getElementById('auth-password-requirements').style.display = isRegister ? 'flex' : 'none';
+    document.getElementById('auth-forgot-row').style.display = isRegister ? 'none' : 'block';
+
+    document.getElementById('auth-mode-desc').innerText = isRegister
+      ? 'Crea tu cuenta para sincronizar tu progreso y documentos en cualquier dispositivo.'
+      : 'Inicia sesión con tu email y contraseña para sincronizar tu progreso y documentos en cualquier dispositivo.';
+
+    const passwordInput = document.getElementById('auth-password');
+    passwordInput.placeholder = isRegister ? 'Mínimo 8 caracteres, mayúscula, minúscula y número' : 'Tu contraseña';
+    passwordInput.setAttribute('autocomplete', isRegister ? 'new-password' : 'current-password');
+
+    document.getElementById('auth-submit-btn').innerText = isRegister ? 'Crear Cuenta' : 'Iniciar Sesión';
+    document.getElementById('auth-error-msg').style.display = 'none';
+  },
+
+  handleAuthSubmit() {
+    if (this.authMode === 'register') {
+      this.handleRegister();
+    } else {
+      this.handleLogin();
+    }
+  },
+
   async handleLogin() {
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
@@ -260,14 +294,38 @@ const app = {
   },
 
   async handleRegister() {
+    const nombre = document.getElementById('auth-nombre').value.trim();
+    const apellidos = document.getElementById('auth-apellidos').value.trim();
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
-    if (!this._validateAuthForm(email, password)) return;
+    const confirmPassword = document.getElementById('auth-confirm-password').value;
+
+    if (!nombre || !apellidos) {
+      this._showAuthError('Introduce tu nombre y apellidos.');
+      return;
+    }
+    if (!email || !password) {
+      this._showAuthError('Introduce tu email y contraseña.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      this._showAuthError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (!this._passwordMeetsRequirements(password)) {
+      this._showAuthError('La contraseña no cumple los requisitos mínimos.');
+      return;
+    }
 
     this.showLoading("Creando tu cuenta...");
     try {
-      await FirebaseService.register(email, password);
+      await FirebaseService.register(email, password, `${nombre} ${apellidos}`);
       await this.loadAppData();
+      if (!this.db.perfilPublico) this.db.perfilPublico = { alias: '' };
+      this.db.perfilPublico.alias = nombre;
+      this.db.perfilPublico.nombre = nombre;
+      this.db.perfilPublico.apellidos = apellidos;
+      await FirebaseService.saveDb(this.db);
     } catch (e) {
       this.hideLoading();
       this._showAuthError(this._translateAuthError(e));
@@ -307,6 +365,28 @@ const app = {
     return true;
   },
 
+  _passwordMeetsRequirements(password) {
+    return !!password && password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password);
+  },
+
+  // Actualiza en tiempo real el checklist visual de requisitos de contraseña
+  checkPasswordRequirements(inputId, listId) {
+    const password = document.getElementById(inputId).value;
+    const list = document.getElementById(listId);
+    if (!list) return;
+
+    const rules = {
+      length: password.length >= 8,
+      upper: /[A-Z]/.test(password),
+      lower: /[a-z]/.test(password),
+      number: /[0-9]/.test(password)
+    };
+
+    list.querySelectorAll('li[data-rule]').forEach((li) => {
+      li.classList.toggle('met', !!rules[li.dataset.rule]);
+    });
+  },
+
   _showAuthError(message) {
     const errorMsg = document.getElementById('auth-error-msg');
     errorMsg.innerText = message;
@@ -323,7 +403,8 @@ const app = {
       'auth/email-already-in-use': 'Ya existe una cuenta con ese email. Pulsa "Iniciar Sesión" en su lugar.',
       'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
       'auth/network-request-failed': 'Error de red. Comprueba tu conexión a internet.',
-      'auth/too-many-requests': 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.'
+      'auth/too-many-requests': 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.',
+      'auth/requires-recent-login': 'Por seguridad, debes cerrar sesión y volver a iniciarla antes de cambiar la contraseña.'
     };
     return map[code] || (e && e.message) || 'Error desconocido al autenticar.';
   },
@@ -334,6 +415,12 @@ const app = {
 
     document.getElementById('settings-firebase-email').innerText = FirebaseService.getCurrentUserEmail() || '-';
     document.getElementById('settings-gemini-key').value = geminiKey;
+
+    document.getElementById('settings-current-password').value = '';
+    document.getElementById('settings-new-password').value = '';
+    document.getElementById('settings-new-password-confirm').value = '';
+    document.getElementById('settings-password-msg').style.display = 'none';
+    this.checkPasswordRequirements('settings-new-password', 'settings-password-requirements');
 
     document.getElementById('modal-settings').classList.add('active');
   },
@@ -347,6 +434,54 @@ const app = {
     GeminiService.setApiKey(geminiKey);
     this.closeSettings();
     alert("Configuración guardada correctamente.");
+  },
+
+  _showSettingsPasswordMsg(text, isError) {
+    const msg = document.getElementById('settings-password-msg');
+    msg.innerText = text;
+    msg.style.color = isError ? 'var(--color-error)' : 'var(--color-success)';
+    msg.style.display = 'block';
+  },
+
+  async handleChangePassword() {
+    const currentPassword = document.getElementById('settings-current-password').value;
+    const newPassword = document.getElementById('settings-new-password').value;
+    const confirmPassword = document.getElementById('settings-new-password-confirm').value;
+
+    if (!currentPassword || !newPassword) {
+      this._showSettingsPasswordMsg('Rellena tu contraseña actual y la nueva contraseña.', true);
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      this._showSettingsPasswordMsg('Las nuevas contraseñas no coinciden.', true);
+      return;
+    }
+    if (!this._passwordMeetsRequirements(newPassword)) {
+      this._showSettingsPasswordMsg('La nueva contraseña no cumple los requisitos mínimos.', true);
+      return;
+    }
+
+    try {
+      await FirebaseService.changePassword(currentPassword, newPassword);
+      this._showSettingsPasswordMsg('Contraseña actualizada correctamente.', false);
+      document.getElementById('settings-current-password').value = '';
+      document.getElementById('settings-new-password').value = '';
+      document.getElementById('settings-new-password-confirm').value = '';
+      this.checkPasswordRequirements('settings-new-password', 'settings-password-requirements');
+    } catch (e) {
+      this._showSettingsPasswordMsg(this._translateAuthError(e), true);
+    }
+  },
+
+  async handleForgotPasswordFromSettings() {
+    const email = FirebaseService.getCurrentUserEmail();
+    if (!email) return;
+    try {
+      await FirebaseService.resetPassword(email);
+      alert("Te hemos enviado un email a " + email + " para restablecer tu contraseña.");
+    } catch (e) {
+      alert("Error al enviar el email: " + this._translateAuthError(e));
+    }
   },
 
   updateSyncStatusUI() {
