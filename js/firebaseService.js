@@ -26,6 +26,10 @@ const FirebaseService = {
     this._storage = firebase.storage();
     // Mantener la sesión iniciada aunque se cierre el navegador
     this._auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    // Cachear los datos en el dispositivo (IndexedDB) para poder seguir usando la app sin conexión
+    this._db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+      console.warn('No se pudo activar la persistencia offline de Firestore:', err.code);
+    });
   },
 
   // Suscribirse a los cambios de sesión (login / logout). Devuelve función para cancelar la suscripción.
@@ -239,8 +243,41 @@ const FirebaseService = {
       documentosTest: [], // array de documentos guardados para generar tests
       preguntasGeneradas: [], // pool general de preguntas generadas por Gemini
       preguntasImpugnadas: [], // array de preguntas reportadas con errores
+      racha: { actual: 0, record: 0, ultimaFecha: null }, // racha diaria de estudio
+      logrosDesbloqueados: {}, // logroId -> fecha ISO de desbloqueo
+      srFlashcards: {}, // cardId -> { ease, interval, dueDate, reps } (repetición espaciada)
+      srPreguntasFalladas: {}, // pregunta (texto) -> { interval, dueDate }
+      srStats: { totalRepasos: 0 },
+      perfilPublico: { alias: '' }, // alias público mostrado en el ranking
       ultimoSync: null
     };
+  },
+
+  // ================= RANKING (colección pública 'rankings') =================
+  // Cada usuario solo puede escribir su propio documento, pero cualquiera autenticado puede leerlos todos
+  async updateRanking(data) {
+    this.init();
+    if (!this.hasCredentials()) return;
+    try {
+      await this._db.collection('rankings').doc(this._uid()).set({
+        ...data,
+        actualizado: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (e) {
+      console.error('No se pudo actualizar el ranking:', e);
+    }
+  },
+
+  async fetchRankingTop(n = 10) {
+    this.init();
+    if (!this.hasCredentials()) return [];
+    try {
+      const snap = await this._db.collection('rankings').orderBy('puntuacionSemanal', 'desc').limit(n).get();
+      return snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    } catch (e) {
+      console.error('No se pudo cargar el ranking:', e);
+      return [];
+    }
   },
 
   // Estimar tipo MIME del archivo por extensión

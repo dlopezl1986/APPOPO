@@ -4,7 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>APPOPO - Tu Oposición Policía Nacional</title>
-  <link rel="stylesheet" href="styles.css?v=2.5">
+  <link rel="stylesheet" href="styles.css?v=2.6">
+
+  <!-- PWA: instalable y con modo offline -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0f4c81">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <!-- SDK de Firebase (sincronización multidispositivo) -->
   <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
@@ -337,6 +345,10 @@
           <div style="display:flex; gap:10px; flex-wrap: wrap;">
             <button class="btn btn-secondary" id="btn-flashcards-modo-normal" onclick="app.setFlashcardMode('normal')">Baraja Completa</button>
             <button class="btn btn-danger" id="btn-flashcards-modo-dificiles" onclick="app.setFlashcardMode('dificiles')">Mazo Difíciles (<span id="lbl-dificiles-badge">0</span>)</button>
+            <button class="btn btn-secondary" id="btn-flashcards-modo-srs" onclick="app.setFlashcardMode('srs')">
+              <svg viewBox="0 0 24 24" width="16" height="16" style="fill:currentColor; vertical-align:middle;"><path d="M12 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2.05-4.95L14 10h7V3l-2.35 2.35A8.97 8.97 0 0 0 12 3z"/></svg>
+              Repaso Inteligente (<span id="lbl-srs-due-count">0</span>)
+            </button>
             <button class="btn btn-primary" onclick="app.openFlashcardsPorTemaModal()">
               <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor; vertical-align: middle;"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H8v-2h6v2zm3-4H8v-2h9v2zm0-4H8V7h9v2z"/></svg>
               Flashcards por Tema
@@ -369,7 +381,7 @@
             </div>
           </div>
 
-          <div class="flashcard-controls-panel">
+          <div class="flashcard-controls-panel" id="flashcard-controls-normal">
             <button class="btn btn-danger" onclick="app.markFlashcardHard(true)" id="btn-flashcard-mark-dificil">
               <svg viewBox="0 0 24 24" width="16" height="16" style="fill:currentColor; vertical-align:middle;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
               Marcar Difícil
@@ -382,6 +394,15 @@
               Siguiente Tarjeta
             </button>
           </div>
+
+          <div class="flashcard-controls-panel srs-controls" id="flashcard-controls-srs" style="display:none;">
+            <div class="srs-rating-row">
+              <button class="btn sr-btn-hard" onclick="app.rateFlashcardSRS('hard')">Difícil</button>
+              <button class="btn sr-btn-good" onclick="app.rateFlashcardSRS('good')">Bien</button>
+              <button class="btn sr-btn-easy" onclick="app.rateFlashcardSRS('easy')">Fácil</button>
+            </div>
+            <p class="srs-next-review-text" id="srs-next-review">Valora la tarjeta para programar su próximo repaso</p>
+          </div>
         </div>
       </section>
 
@@ -391,6 +412,28 @@
           <div class="section-info">
             <h1>Estadísticas de Progreso</h1>
             <p>Conteo de estudio por tema y número de vueltas completadas al temario.</p>
+          </div>
+        </div>
+
+        <div class="gami-row">
+          <div class="gami-streak-card">
+            <div class="gami-streak-flame">🔥</div>
+            <p class="gami-streak-number" id="streak-num">0</p>
+            <p class="muted" style="font-size:12px; margin:0;">días seguidos estudiando</p>
+            <p class="muted" style="font-size:11px; margin:2px 0 0;">Récord: <span id="streak-record">0</span> días</p>
+            <div class="week-strip" id="week-strip-real"></div>
+          </div>
+
+          <div class="gami-logros-card">
+            <h3 class="progress-card-title" style="margin-bottom:12px;">Logros</h3>
+            <div class="badge-grid" id="badge-grid-real"></div>
+          </div>
+
+          <div class="gami-ranking-card">
+            <h3 class="progress-card-title" style="margin-bottom:8px;">Ranking Semanal</h3>
+            <div id="rank-list-real">
+              <p class="muted" style="font-size:12px; text-align:center; padding:10px;">Cargando ranking...</p>
+            </div>
           </div>
         </div>
 
@@ -814,6 +857,12 @@
     </div>
   </div>
 
+  <!-- Contenedor de avisos de logros desbloqueados (no bloqueante) -->
+  <div id="achievement-toast-container" style="position:fixed; top:16px; right:16px; z-index:400; display:flex; flex-direction:column; gap:10px; pointer-events:none;"></div>
+
+  <!-- Banner de estado de conexión (Modo Offline) -->
+  <div id="connection-banner" style="display:none; position:fixed; bottom:0; left:0; right:0; z-index:350; text-align:center; padding:8px 16px; font-size:12px; font-weight:600;"></div>
+
   <!-- Loading overlay universal para llamadas a API de Gemini/Firebase -->
   <div id="app-loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(4,8,17,0.9); backdrop-filter:blur(8px); z-index:300; align-items:center; justify-content:center; flex-direction:column; gap:16px;">
     <div style="width: 50px; height: 50px; border: 4px solid var(--color-primary); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
@@ -828,10 +877,10 @@
   </style>
 
   <!-- ================= CARGA DE SCRIPTS ================= -->
-  <script src="js/temarioBase.js?v=2.5"></script>
-  <script src="js/firebaseService.js?v=2.5"></script>
-  <script src="js/geminiService.js?v=2.5"></script>
-  <script src="js/app.js?v=2.5"></script>
+  <script src="js/temarioBase.js?v=2.6"></script>
+  <script src="js/firebaseService.js?v=2.6"></script>
+  <script src="js/geminiService.js?v=2.6"></script>
+  <script src="js/app.js?v=2.6"></script>
 
 </body>
 </html>

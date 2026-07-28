@@ -184,6 +184,12 @@ const app = {
     if (!this.db.documentosTest) this.db.documentosTest = [];
     if (!this.db.preguntasGeneradas) this.db.preguntasGeneradas = [];
     if (!this.db.preguntasImpugnadas) this.db.preguntasImpugnadas = [];
+    if (!this.db.racha) this.db.racha = { actual: 0, record: 0, ultimaFecha: null };
+    if (!this.db.logrosDesbloqueados) this.db.logrosDesbloqueados = {};
+    if (!this.db.srFlashcards) this.db.srFlashcards = {};
+    if (!this.db.srPreguntasFalladas) this.db.srPreguntasFalladas = {};
+    if (!this.db.srStats) this.db.srStats = { totalRepasos: 0 };
+    if (!this.db.perfilPublico) this.db.perfilPublico = { alias: '' };
 
     // 2. Comprobar credenciales de sincronización
     this.updateSyncStatusUI();
@@ -1215,10 +1221,17 @@ const app = {
 
     this.db.calendario[this.selectedDate].temasEstudiados = checkedThemes;
 
+    // Solo cuenta para la racha si se marcan temas estudiados en el día de HOY
+    // (editar un día pasado no debe alterar retroactivamente la racha actual)
+    const hoy = new Date().toISOString().split('T')[0];
+    if (checkedThemes.length > 0 && this.selectedDate === hoy) {
+      this.registrarActividadDiaria();
+    }
+
     // Guardar
     FirebaseService.saveDb(this.db);
     this.closeModal('modal-calendario-detail');
-    
+
     this.renderCalendar();
     this.updateTodayChecklist();
     this.updateProgressStats();
@@ -1290,6 +1303,33 @@ const app = {
     }
   },
 
+  // ================= CACHÉ DE DOCUMENTOS PARA MODO OFFLINE =================
+  // Guarda el contenido de un documento ya visto para poder reabrirlo sin conexión (Cache API)
+  async _cacheDocBytes(path, bytes, mimeType) {
+    if (!path || !('caches' in window)) return;
+    try {
+      const cache = await caches.open('appopo-docs-v1');
+      const response = new Response(bytes, { headers: { 'Content-Type': mimeType } });
+      await cache.put(new Request('https://appopo-docs.local/' + encodeURIComponent(path)), response);
+    } catch (e) {
+      console.warn('No se pudo guardar el documento en caché offline:', e);
+    }
+  },
+
+  // Recuperar los bytes de un documento previamente cacheado, si existen
+  async _getCachedDocBytes(path) {
+    if (!path || !('caches' in window)) return null;
+    try {
+      const cache = await caches.open('appopo-docs-v1');
+      const match = await cache.match(new Request('https://appopo-docs.local/' + encodeURIComponent(path)));
+      if (!match) return null;
+      const buffer = await match.arrayBuffer();
+      return new Uint8Array(buffer);
+    } catch (e) {
+      return null;
+    }
+  },
+
   // Previsualizar documento (PDF / Imagen) en modal dentro de la App.
   // Las imágenes se cargan directamente desde la URL de Firebase Storage. Los PDF se descargan
   // como Blob y se muestran desde una URL local (blob:) porque Firebase Storage no permite
@@ -1354,25 +1394,46 @@ const app = {
           </div>
         `;
         try {
-          const fileData = await FirebaseService.fetchFile(path, true);
-          if (!fileData || !fileData.content) {
-            throw new Error('No se pudo descargar el contenido del PDF.');
+          let bytes = null;
+
+          // Si no hay conexión, intentar servir desde la caché de documentos ya vistos antes
+          if (!navigator.onLine) {
+            bytes = await this._getCachedDocBytes(path);
           }
-          const binaryString = atob(fileData.content);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+
+          if (!bytes) {
+            const fileData = await FirebaseService.fetchFile(path, true);
+            if (!fileData || !fileData.content) {
+              throw new Error('No se pudo descargar el contenido del PDF.');
+            }
+            const binaryString = atob(fileData.content);
+            bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            this._cacheDocBytes(path, bytes, 'application/pdf');
           }
+
           const blobUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
           this.currentPreviewObjectUrl = blobUrl;
           content.innerHTML = `<iframe src="${blobUrl}" style="width:100%; height:100%; border:none; border-radius:6px; background:#040811;"></iframe>`;
         } catch (e) {
           console.error("Error al cargar el PDF para previsualizar:", e);
+
+          // Último intento: si falló la red, comprobar si lo teníamos ya cacheado offline
+          const cachedBytes = await this._getCachedDocBytes(path);
+          if (cachedBytes) {
+            const blobUrl = URL.createObjectURL(new Blob([cachedBytes], { type: 'application/pdf' }));
+            this.currentPreviewObjectUrl = blobUrl;
+            content.innerHTML = `<iframe src="${blobUrl}" style="width:100%; height:100%; border:none; border-radius:6px; background:#040811;"></iframe>`;
+            return;
+          }
+
           content.innerHTML = `
             <div style="color:var(--text-muted); padding:32px; text-align:center; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px;">
               <svg viewBox="0 0 24 24" width="48" height="48" style="fill:currentColor; color:var(--text-muted);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
               <p style="font-size:14px; font-weight:600; color:#fff; margin:0;">No se pudo mostrar el PDF aquí dentro</p>
-              <p style="font-size:12px; margin:0; max-width:320px;">Pulsa "Abrir en pestaña nueva" para verlo directamente en el navegador.</p>
+              <p style="font-size:12px; margin:0; max-width:320px;">${navigator.onLine ? 'Pulsa "Abrir en pestaña nueva" para verlo directamente en el navegador.' : 'Estás sin conexión y este documento todavía no se había guardado para verlo offline.'}</p>
             </div>
           `;
         }
@@ -1940,9 +2001,14 @@ const app = {
     this.activeExam.tipoExamen = 'falladas';
     this.activeExam.temaId = null;
 
-    // Barajar y coger máximo 15 preguntas
-    const shuffled = [...falladas].sort(() => 0.5 - Math.random());
-    this.activeExam.questions = shuffled.slice(0, Math.min(15, shuffled.length));
+    // Priorizar las preguntas cuyo repaso ya toca (repetición espaciada); el resto, de relleno
+    const hoy = new Date().toISOString().split('T')[0];
+    const sr = this.db.srPreguntasFalladas || {};
+    const toca = falladas.filter(q => !sr[q.pregunta] || sr[q.pregunta].dueDate <= hoy);
+    const pendientes = falladas.filter(q => sr[q.pregunta] && sr[q.pregunta].dueDate > hoy);
+
+    const ordenadas = [...toca.sort(() => 0.5 - Math.random()), ...pendientes.sort(() => 0.5 - Math.random())];
+    this.activeExam.questions = ordenadas.slice(0, Math.min(15, ordenadas.length));
 
     this.iniciarInterfazExamen();
   },
@@ -2130,14 +2196,21 @@ const app = {
         isBlank: isBlank
       });
 
-      // Si falló, guardarla en el banco de falladas
+      const eraFallada = (this.db.preguntasFalladas || []).some(f => f.pregunta === q.pregunta);
+
+      // Si falló, guardarla en el banco de falladas y programar su repaso (repetición espaciada)
       if (!isCorrect && !isBlank) {
         this.addPreguntaFallada(q);
-      }
-
-      // Si el test es de "falladas" y acertó la pregunta, la eliminamos/decrementamos de la lista
-      if (this.activeExam.tipoExamen === 'falladas' && isCorrect) {
-        this.removePreguntaFallada(q);
+        this._actualizarSRPregunta(q.pregunta, false);
+      } else if (isCorrect && eraFallada) {
+        if (this.activeExam.tipoExamen === 'falladas') {
+          // Test específico de "falladas" y la acertó: se gradúa y sale del banco
+          this.removePreguntaFallada(q);
+          if (this.db.srPreguntasFalladas) delete this.db.srPreguntasFalladas[q.pregunta];
+        } else {
+          // La acertó en otro tipo de test: la aleja en el calendario de repaso, pero se queda en el banco
+          this._actualizarSRPregunta(q.pregunta, true);
+        }
       }
     });
 
@@ -2159,6 +2232,9 @@ const app = {
     };
     if (!this.db.historialExamenes) this.db.historialExamenes = [];
     this.db.historialExamenes.push(examLog);
+
+    // Registrar actividad del día (racha + logros + ranking)
+    this.registrarActividadDiaria();
 
     // Guardar base de datos
     FirebaseService.saveDb(this.db);
@@ -2513,6 +2589,9 @@ const app = {
     this.flashcardMode = 'normal';
     document.getElementById('btn-flashcards-modo-normal').className = 'btn btn-primary';
     document.getElementById('btn-flashcards-modo-dificiles').className = 'btn btn-secondary';
+    document.getElementById('btn-flashcards-modo-srs').className = 'btn btn-secondary';
+    document.getElementById('flashcard-controls-normal').style.display = 'flex';
+    document.getElementById('flashcard-controls-srs').style.display = 'none';
 
     // Construir mazo
     this.buildFlashcardDeck();
@@ -2520,20 +2599,72 @@ const app = {
 
   setFlashcardMode(mode) {
     this.flashcardMode = mode;
-    
+
+    document.getElementById('btn-flashcards-modo-normal').className = mode === 'normal' ? 'btn btn-primary' : 'btn btn-secondary';
+    document.getElementById('btn-flashcards-modo-dificiles').className = mode === 'dificiles' ? 'btn btn-danger' : 'btn btn-secondary';
+    document.getElementById('btn-flashcards-modo-srs').className = mode === 'srs' ? 'btn btn-primary' : 'btn btn-secondary';
+
+    document.getElementById('flashcard-controls-normal').style.display = mode === 'srs' ? 'none' : 'flex';
+    document.getElementById('flashcard-controls-srs').style.display = mode === 'srs' ? 'flex' : 'none';
+
     if (mode === 'normal') {
-      document.getElementById('btn-flashcards-modo-normal').className = 'btn btn-primary';
-      document.getElementById('btn-flashcards-modo-dificiles').className = 'btn btn-secondary';
       document.getElementById('btn-flashcard-mark-dificil').style.display = 'inline-flex';
       document.getElementById('btn-flashcard-mark-facil').style.display = 'none';
-    } else {
-      document.getElementById('btn-flashcards-modo-normal').className = 'btn btn-secondary';
-      document.getElementById('btn-flashcards-modo-dificiles').className = 'btn btn-danger';
+    } else if (mode === 'dificiles') {
       document.getElementById('btn-flashcard-mark-dificil').style.display = 'none';
       document.getElementById('btn-flashcard-mark-facil').style.display = 'inline-flex';
     }
 
-    this.buildFlashcardDeck();
+    if (mode === 'srs') {
+      const hint = document.getElementById('srs-next-review');
+      if (hint) hint.innerText = 'Valora la tarjeta para programar su próximo repaso';
+      this.buildSRSDeck();
+    } else {
+      this.buildFlashcardDeck();
+    }
+  },
+
+  // Construir el mazo de "Repaso Inteligente": solo las tarjetas cuyo repaso ya toca hoy
+  buildSRSDeck() {
+    const hoy = new Date().toISOString().split('T')[0];
+    const sr = this.db.srFlashcards || {};
+    const todas = [...this.mockFlashcards, ...(this.db.flashcardsGeneradas || [])];
+
+    const due = todas.filter(c => !sr[c.anverso] || sr[c.anverso].dueDate <= hoy);
+
+    this.activeFlashcardDeck = due.sort(() => 0.5 - Math.random());
+    this.activeFlashcardIndex = 0;
+
+    const dueCountEl = document.getElementById('lbl-srs-due-count');
+    if (dueCountEl) dueCountEl.innerText = due.length;
+
+    this.showFlashcard(0);
+  },
+
+  // Valorar una tarjeta en modo Repaso Inteligente (Difícil / Bien / Fácil) y programar su siguiente aparición
+  rateFlashcardSRS(calidad) {
+    const deck = this.activeFlashcardDeck;
+    if (deck.length === 0) return;
+
+    const currentCard = deck[this.activeFlashcardIndex];
+    if (!this.db.srFlashcards) this.db.srFlashcards = {};
+    const nuevoEstado = this._calcularSM2(this.db.srFlashcards[currentCard.anverso], calidad);
+    this.db.srFlashcards[currentCard.anverso] = nuevoEstado;
+
+    this.registrarActividadDiaria();
+    FirebaseService.saveDb(this.db);
+
+    const etiquetas = { hard: 'mañana', good: `${nuevoEstado.interval} día${nuevoEstado.interval === 1 ? '' : 's'}`, easy: `${nuevoEstado.interval} día${nuevoEstado.interval === 1 ? '' : 's'}` };
+    const hint = document.getElementById('srs-next-review');
+    if (hint) hint.innerHTML = `Próximo repaso: <b>${etiquetas[calidad]}</b>`;
+
+    // Sacar la tarjeta ya valorada de la sesión de hoy y avanzar
+    deck.splice(this.activeFlashcardIndex, 1);
+    const dueCountEl = document.getElementById('lbl-srs-due-count');
+    if (dueCountEl) dueCountEl.innerText = deck.length;
+
+    if (this.activeFlashcardIndex >= deck.length) this.activeFlashcardIndex = 0;
+    this.showFlashcard(this.activeFlashcardIndex);
   },
 
   // Abrir modal de selección de tema para generar flashcards con IA
@@ -2638,6 +2769,9 @@ const app = {
     // Mostrar de inmediato el mazo recién generado (sin alterar el modo persistente Baraja/Difíciles)
     document.getElementById('btn-flashcards-modo-normal').className = 'btn btn-secondary';
     document.getElementById('btn-flashcards-modo-dificiles').className = 'btn btn-secondary';
+    document.getElementById('btn-flashcards-modo-srs').className = 'btn btn-secondary';
+    document.getElementById('flashcard-controls-normal').style.display = 'flex';
+    document.getElementById('flashcard-controls-srs').style.display = 'none';
     document.getElementById('btn-flashcard-mark-dificil').style.display = 'inline-flex';
     document.getElementById('btn-flashcard-mark-facil').style.display = 'none';
 
@@ -2685,9 +2819,12 @@ const app = {
 
     if (total === 0) {
       document.getElementById('flashcard-current-index').innerText = 0;
-      document.getElementById('card-front-text').innerText = this.flashcardMode === 'normal' 
-        ? "No hay flashcards cargadas." 
-        : "¡Excelente! No tienes tarjetas difíciles pendientes.";
+      const mensajes = {
+        normal: "No hay flashcards cargadas.",
+        dificiles: "¡Excelente! No tienes tarjetas difíciles pendientes.",
+        srs: "¡Al día! No tienes repasos pendientes por ahora."
+      };
+      document.getElementById('card-front-text').innerText = mensajes[this.flashcardMode] || mensajes.normal;
       document.getElementById('card-back-text').innerText = "Vuelve a la Baraja Completa o genera nuevas desde el Temario.";
       return;
     }
@@ -2758,7 +2895,220 @@ const app = {
 
     // Actualizar badge e indicador
     document.getElementById('lbl-dificiles-badge').innerText = this.db.flashcardsDificiles.length;
+    this.registrarActividadDiaria();
     FirebaseService.saveDb(this.db);
+  },
+
+  // ================= GAMIFICACIÓN: RACHA, LOGROS Y RANKING =================
+  LOGROS_DEFINICIONES: [
+    { id: 'primer_examen', nombre: 'Primeros Pasos', icono: '🎯', desc: 'Completa tu primer test', condicion: (db) => (db.historialExamenes || []).length >= 1 },
+    { id: 'racha_7', nombre: 'Racha de 7 días', icono: '🔥', desc: 'Estudia 7 días seguidos', condicion: (db) => (db.racha?.record || 0) >= 7 },
+    { id: 'racha_30', nombre: 'Racha de 30 días', icono: '⚡', desc: 'Estudia 30 días seguidos', condicion: (db) => (db.racha?.record || 0) >= 30 },
+    { id: 'diez_examenes', nombre: '10 Exámenes Completados', icono: '📝', desc: 'Completa 10 tests', condicion: (db) => (db.historialExamenes || []).length >= 10 },
+    { id: 'nota_perfecta', nombre: 'Nota Perfecta', icono: '🏆', desc: 'Saca un 10 en un test', condicion: (db) => (db.historialExamenes || []).some(e => e.nota >= 10) },
+    { id: 'tema_dominado', nombre: 'Tema Dominado', icono: '📖', desc: 'Estudia un mismo tema 5 veces', condicion: (db) => Object.values(db.temario || {}).some(t => (t.vueltas || 0) >= 5) },
+    { id: 'cazador_errores', nombre: 'Cazador de Errores', icono: '🔍', desc: 'Reporta 5 preguntas con errores', condicion: (db) => (db.preguntasImpugnadas || []).length >= 5 },
+    { id: 'repaso_50', nombre: 'Repaso Inteligente', icono: '🧠', desc: 'Completa 50 repasos con repetición espaciada', condicion: (db) => (db.srStats?.totalRepasos || 0) >= 50 }
+  ],
+
+  // ================= REPETICIÓN ESPACIADA (algoritmo tipo SM-2) =================
+  // Calcula el nuevo estado de repaso (ease, intervalo, próxima fecha) a partir de una valoración.
+  // calidad: 'hard' (difícil/fallo) | 'good' (bien) | 'easy' (fácil)
+  _calcularSM2(estadoActual, calidad) {
+    let ease = (estadoActual && estadoActual.ease) || 2.5;
+    let interval = (estadoActual && estadoActual.interval) || 0;
+    let reps = (estadoActual && estadoActual.reps) || 0;
+
+    if (calidad === 'hard') {
+      reps = 0;
+      interval = 1;
+      ease = Math.max(1.3, ease - 0.2);
+    } else {
+      reps += 1;
+      interval = interval === 0 ? (calidad === 'easy' ? 4 : 1) : Math.round(interval * ease);
+      if (calidad === 'easy') {
+        ease += 0.15;
+        interval = Math.round(interval * 1.3);
+      }
+    }
+
+    const due = new Date();
+    due.setDate(due.getDate() + interval);
+
+    if (!this.db.srStats) this.db.srStats = { totalRepasos: 0 };
+    this.db.srStats.totalRepasos = (this.db.srStats.totalRepasos || 0) + 1;
+
+    return {
+      ease: parseFloat(ease.toFixed(2)),
+      interval,
+      reps,
+      dueDate: due.toISOString().split('T')[0]
+    };
+  },
+
+  // Actualizar la programación de repaso de una pregunta fallada (correcta -> se aleja, incorrecta -> mañana)
+  _actualizarSRPregunta(pregunta, esCorrecta) {
+    if (!this.db.srPreguntasFalladas) this.db.srPreguntasFalladas = {};
+    const estado = this.db.srPreguntasFalladas[pregunta];
+    this.db.srPreguntasFalladas[pregunta] = this._calcularSM2(estado, esCorrecta ? 'good' : 'hard');
+  },
+
+  // Registrar actividad de estudio de hoy: actualiza la racha, evalúa logros y refresca el ranking.
+  // Se llama desde cualquier acción real de estudio (examen, calendario, repaso de flashcard).
+  registrarActividadDiaria() {
+    if (!this.db.racha) this.db.racha = { actual: 0, record: 0, ultimaFecha: null };
+    const r = this.db.racha;
+    const hoy = new Date().toISOString().split('T')[0];
+    if (r.ultimaFecha === hoy) return; // ya contabilizada hoy
+
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    const ayerStr = ayer.toISOString().split('T')[0];
+
+    r.actual = (r.ultimaFecha === ayerStr) ? r.actual + 1 : 1;
+    if (r.actual > r.record) r.record = r.actual;
+    r.ultimaFecha = hoy;
+
+    this.evaluarLogros();
+    this.actualizarRankingPropio();
+  },
+
+  // Comprobar qué logros se han desbloqueado y avisar de los nuevos (sin bloquear la interfaz)
+  evaluarLogros() {
+    if (!this.db.logrosDesbloqueados) this.db.logrosDesbloqueados = {};
+    const nuevos = [];
+    this.LOGROS_DEFINICIONES.forEach(l => {
+      if (!this.db.logrosDesbloqueados[l.id] && l.condicion(this.db)) {
+        this.db.logrosDesbloqueados[l.id] = new Date().toISOString();
+        nuevos.push(l);
+      }
+    });
+    if (nuevos.length > 0) {
+      nuevos.forEach(l => this.mostrarLogroToast(l));
+    }
+  },
+
+  // Mostrar un aviso breve y no intrusivo de logro desbloqueado
+  mostrarLogroToast(logro) {
+    const container = document.getElementById('achievement-toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = 'achievement-toast';
+    toast.innerHTML = `
+      <span class="achievement-toast-icon">${logro.icono}</span>
+      <div>
+        <div class="achievement-toast-title">¡Logro desbloqueado!</div>
+        <div class="achievement-toast-name">${logro.nombre}</div>
+      </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('visible'), 20);
+    setTimeout(() => {
+      toast.classList.remove('visible');
+      setTimeout(() => toast.remove(), 400);
+    }, 4200);
+  },
+
+  // Calcular la puntuación semanal y subir la fila pública de ranking del usuario
+  async actualizarRankingPropio() {
+    if (!FirebaseService.hasCredentials()) return;
+
+    const unaSemanaAtras = new Date();
+    unaSemanaAtras.setDate(unaSemanaAtras.getDate() - 7);
+
+    const puntuacion = (this.db.historialExamenes || [])
+      .filter(e => new Date(e.fecha) >= unaSemanaAtras)
+      .reduce((suma, e) => suma + Math.max(0, Math.round(e.aciertos * 10 - e.fallos * 5)), 0);
+
+    const email = FirebaseService.getCurrentUserEmail() || '';
+    const alias = (this.db.perfilPublico && this.db.perfilPublico.alias) || email.split('@')[0] || 'Opositor';
+
+    await FirebaseService.updateRanking({
+      alias,
+      puntuacionSemanal: puntuacion,
+      racha: this.db.racha?.actual || 0
+    });
+  },
+
+  // Renderizar la racha, los logros y el ranking en la pestaña Progreso
+  async renderGamificacion() {
+    const racha = this.db.racha || { actual: 0, record: 0 };
+
+    const streakNumEl = document.getElementById('streak-num');
+    if (streakNumEl) streakNumEl.innerText = racha.actual || 0;
+    const streakRecordEl = document.getElementById('streak-record');
+    if (streakRecordEl) streakRecordEl.innerText = racha.record || 0;
+
+    // Tira de los últimos 7 días: se marca un día como "hecho" si cae dentro de los
+    // últimos `racha.actual` días contando hacia atrás desde `racha.ultimaFecha`.
+    const weekStrip = document.getElementById('week-strip-real');
+    if (weekStrip) {
+      const nombresDias = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
+      const hoy = new Date();
+      const ultimaFecha = racha.ultimaFecha ? new Date(racha.ultimaFecha + 'T00:00:00') : null;
+      let html = '';
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(hoy.getDate() - i);
+
+        let hecho = false;
+        if (ultimaFecha) {
+          const diffDias = Math.round((ultimaFecha - d) / 86400000);
+          hecho = diffDias >= 0 && diffDias < racha.actual;
+        }
+        const esHoy = i === 0;
+        html += `
+          <div class="week-day">
+            <div class="week-dot ${hecho ? 'done' : ''} ${esHoy && !hecho ? 'today' : ''}">${hecho ? '✓' : nombresDias[d.getDay()]}</div>
+            <span>${nombresDias[d.getDay()]}</span>
+          </div>
+        `;
+      }
+      weekStrip.innerHTML = html;
+    }
+
+    // Logros
+    const badgeGrid = document.getElementById('badge-grid-real');
+    if (badgeGrid) {
+      badgeGrid.innerHTML = this.LOGROS_DEFINICIONES.map(l => {
+        const unlocked = !!(this.db.logrosDesbloqueados || {})[l.id];
+        return `
+          <div class="badge-tile ${unlocked ? 'unlocked' : 'locked'}" title="${l.desc}">
+            <div class="icon-wrap">${l.icono}</div>
+            <p>${l.nombre}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Ranking
+    const rankList = document.getElementById('rank-list-real');
+    if (rankList) {
+      if (!FirebaseService.hasCredentials()) {
+        rankList.innerHTML = `<p class="muted" style="font-size:12px; text-align:center; padding:10px;">Inicia sesión para ver el ranking.</p>`;
+        return;
+      }
+      try {
+        const top = await FirebaseService.fetchRankingTop(10);
+        const miUid = FirebaseService._auth.currentUser.uid;
+        if (top.length === 0) {
+          rankList.innerHTML = `<p class="muted" style="font-size:12px; text-align:center; padding:10px;">Todavía no hay datos de ranking. Completa un test para aparecer aquí.</p>`;
+          return;
+        }
+        rankList.innerHTML = top.map((row, idx) => `
+          <div class="rank-row ${row.uid === miUid ? 'me' : ''}">
+            <span class="rank-pos">${idx + 1}</span>
+            <div class="rank-avatar">${(row.alias || '?').charAt(0).toUpperCase()}</div>
+            <span class="rank-name">${row.alias}${row.uid === miUid ? ' (tú)' : ''}</span>
+            <span class="rank-score">${row.puntuacionSemanal || 0}</span>
+          </div>
+        `).join('');
+      } catch (e) {
+        rankList.innerHTML = `<p class="muted" style="font-size:12px; text-align:center; padding:10px;">No se pudo cargar el ranking.</p>`;
+      }
+    }
   },
 
   // ================= PESTAÑA: PROGRESO =================
@@ -2817,6 +3167,9 @@ const app = {
 
     // 4. Dibujar Gráfico SVG Histórico
     this.drawProgressChart(examenes);
+
+    // 5. Racha, logros y ranking
+    this.renderGamificacion();
   },
 
   drawProgressChart(examenes) {
@@ -2970,3 +3323,30 @@ const app = {
 window.addEventListener('DOMContentLoaded', () => {
   app.init();
 });
+
+// ================= MODO OFFLINE (PWA) =================
+// Registrar el Service Worker: cachea la app y permite instalarla y abrirla sin conexión
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch((e) => {
+      console.warn('No se pudo registrar el Service Worker:', e);
+    });
+  });
+}
+
+// Banner de estado de conexión
+function actualizarBannerConexion() {
+  const banner = document.getElementById('connection-banner');
+  if (!banner) return;
+  if (navigator.onLine) {
+    banner.className = '';
+    banner.style.display = 'none';
+  } else {
+    banner.className = 'offline';
+    banner.innerText = 'Sin conexión — puedes seguir estudiando con el contenido ya cargado';
+    banner.style.display = 'block';
+  }
+}
+window.addEventListener('online', actualizarBannerConexion);
+window.addEventListener('offline', actualizarBannerConexion);
+window.addEventListener('DOMContentLoaded', actualizarBannerConexion);
